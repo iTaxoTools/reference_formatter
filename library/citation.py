@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
 from enum import IntEnum, Enum
-from typing import Dict, List, Optional, Iterator, Any
+from typing import Dict, List, Optional, Iterator, Any, TextIO
+import os
 
 import regex
 
@@ -95,6 +96,8 @@ class Reference:
     @staticmethod
     def parse(s: str) -> Optional['Reference']:
         year_match = regex.search(r'\(?(\d+)\)?\S?', s)
+        if not year_match:
+            return None
         year_start, year_end = year_match.span()
         authors = s[:year_start]
         year = int(year_match.group(1))
@@ -135,3 +138,12 @@ class Reference:
                 yield(Author(surname, initials))
             except IndexError as e:
                 raise StopIteration from e
+
+
+def process_reference_file(input: TextIO, output_dir: str, options: OptionsDict):
+    with open(os.path.join(output_dir, "output"), mode="w") as outfile:
+        for line in input:
+            reference = Reference.parse(line)
+            if reference is None:
+                continue
+            print(reference.format_reference(options), file=outfile)
