@@ -102,7 +102,10 @@ class Reference:
         authors = s[:year_start]
         year = int(year_match.group(1))
         article = s[year_end:]
-        return Reference(Reference.parse_authors(authors), year, article)
+        try:
+            return Reference(Reference.parse_authors(authors), year, article)
+        except IndexError:  # parts.pop in extract_author
+            return None
 
     @staticmethod
     def parse_authors(s: str) -> List[Author]:
@@ -119,25 +122,22 @@ class Reference:
     @staticmethod
     def extract_author(parts: List[str]) -> Iterator[Author]:
         while parts:
-            try:
-                part = parts.pop(0)
-                find_surname = regex.search(
-                    r'[[:upper:]][[:lower:]].*[[:lower:]]', part)
-                if not find_surname:
-                    initials = part
-                    surname = parts.pop(0)
-                elif find_surname.span() == (0, len(part)):
-                    surname = part
-                    initials = parts.pop(0)
-                elif find_surname.start() == 0:
-                    surname = find_surname.group()
-                    initials = part[find_surname.end() + 1:]
-                else:
-                    surname = find_surname.group()
-                    initials = part[:find_surname.start() - 1]
-                yield(Author(surname, initials))
-            except IndexError as e:
-                raise StopIteration from e
+            part = parts.pop(0)
+            find_surname = regex.search(
+                r'[[:upper:]][[:lower:]\'].*[[:lower:]]', part)
+            if not find_surname:
+                initials = part
+                surname = parts.pop(0)
+            elif find_surname.span() == (0, len(part)):
+                surname = part
+                initials = parts.pop(0)
+            elif find_surname.start() == 0:
+                surname = find_surname.group()
+                initials = part[find_surname.end() + 1:]
+            else:
+                surname = find_surname.group()
+                initials = part[:find_surname.start() - 1]
+            yield(Author(surname, initials))
 
 
 def process_reference_file(input: TextIO, output_dir: str, options: OptionsDict):
@@ -145,5 +145,7 @@ def process_reference_file(input: TextIO, output_dir: str, options: OptionsDict)
         for line in input:
             reference = Reference.parse(line)
             if reference is None:
+                outfile.write('*')
+                outfile.write(line)
                 continue
-            print(reference.format_reference(options), file=outfile)
+            outfile.write(reference.format_reference(options))
