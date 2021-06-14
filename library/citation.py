@@ -44,6 +44,7 @@ class YearFormat(IntEnum):
 class Options(Enum):
     InitialsBefore = (bool, "Place initials before surname (except first name)")
     InitialsNoPeriod = (bool, "Write initials without abbreviating period")
+    KeepNumbering = (bool, "Keep numbering of references")
     LastNameSep = (LastSeparator, "Precede last name with:")
     YearFormat = (YearFormat, "Format year as:")
 
@@ -105,9 +106,15 @@ class Reference:
         else:
             return ", ".join(authors) + str(options[Options.LastNameSep]) + last_author
 
+    def format_numbering(self, options: OptionsDict) -> str:
+        if options[Options.KeepNumbering] and self.numbering:
+            return self.numbering
+        else:
+            return ""
+
     def format_reference(self, options: OptionsDict):
         return (
-            self.numbering
+            self.format_numbering(options)
             + self.format_authors(options)
             + " "
             + options[Options.YearFormat].format_year(self.year)
