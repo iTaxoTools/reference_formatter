@@ -42,8 +42,7 @@ class YearFormat(IntEnum):
 
 
 class Options(Enum):
-    InitialsBefore = (
-        bool, "Place initials before surname (except first name)")
+    InitialsBefore = (bool, "Place initials before surname (except first name)")
     InitialsNoPeriod = (bool, "Write initials without abbreviating period")
     LastNameSep = (LastSeparator, "Precede last name with:")
     YearFormat = (YearFormat, "Format year as:")
@@ -115,16 +114,16 @@ class Reference:
             parts_rest, sep, last_part = s.partition(lastsep)
             if sep:
                 break
-        parts = [part for part in parts_rest.split(
-            ", ") + last_part.split(", ") if part]
+        parts = [
+            part for part in parts_rest.split(", ") + last_part.split(", ") if part
+        ]
         return [author for author in Reference.extract_author(parts)]
 
     @staticmethod
     def extract_author(parts: List[str]) -> Iterator[Author]:
         while parts:
             part = parts.pop(0)
-            find_surname = regex.search(
-                r'[[:upper:]][[:lower:]\'].*[[:lower:]]', part)
+            find_surname = regex.search(r"[[:upper:]][[:lower:]\'].*[[:lower:]]", part)
             if not find_surname:
                 initials = part
                 surname = parts.pop(0)
@@ -133,11 +132,11 @@ class Reference:
                 initials = parts.pop(0)
             elif find_surname.start() == 0:
                 surname = find_surname.group()
-                initials = part[find_surname.end() + 1:]
+                initials = part[find_surname.end() + 1 :]
             else:
                 surname = find_surname.group()
-                initials = part[:find_surname.start() - 1]
-            yield(Author(surname, initials))
+                initials = part[: find_surname.start() - 1]
+            yield (Author(surname, initials))
 
 
 def process_reference_file(input: TextIO, output_dir: str, options: OptionsDict):
@@ -145,7 +144,7 @@ def process_reference_file(input: TextIO, output_dir: str, options: OptionsDict)
         for line in input:
             reference = Reference.parse(line)
             if reference is None:
-                outfile.write('*')
+                outfile.write("*")
                 outfile.write(line)
                 continue
             outfile.write(reference.format_reference(options))
