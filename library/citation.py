@@ -55,6 +55,18 @@ class Options(Enum):
 OptionsDict = Dict[Options, Any]
 
 
+def default_options() -> OptionsDict:
+    result: OptionsDict = {}
+    for option in list(Options):
+        if option.type is bool:
+            result[option] = False
+        elif issubclass(option.type, IntEnum):
+            result[option] = option.type(0)
+        else:
+            assert False
+    return result
+
+
 class Author:
     def __init__(self, surname: str, initials: str):
         self.surname = surname
