@@ -84,7 +84,10 @@ class Author:
 
 
 class Reference:
-    def __init__(self, authors: List[Author], year: int, article: str):
+    def __init__(
+        self, numbering: Optional[str], authors: List[Author], year: int, article: str
+    ):
+        self.numbering = numbering
         self.authors = authors
         self.year = year
         self.article = article
@@ -92,21 +95,35 @@ class Reference:
     def format_authors(self, options: OptionsDict):
         if not self.authors:
             return ""
-        formatted_authors = (author.format_author(options, i == 0)
-                             for i, author in enumerate(self.authors))
+        formatted_authors = (
+            author.format_author(options, i == 0)
+            for i, author in enumerate(self.authors)
+        )
         *authors, last_author = formatted_authors
         if not authors:
             return last_author
         else:
-            return ", ".join(authors) + \
-                str(options[Options.LastNameSep]) + last_author
+            return ", ".join(authors) + str(options[Options.LastNameSep]) + last_author
 
     def format_reference(self, options: OptionsDict):
-        return self.format_authors(options) + " " + options[Options.YearFormat].format_year(self.year) + " " + self.article
+        return (
+            self.numbering
+            + self.format_authors(options)
+            + " "
+            + options[Options.YearFormat].format_year(self.year)
+            + " "
+            + self.article
+        )
 
     @staticmethod
-    def parse(s: str) -> Optional['Reference']:
-        year_match = regex.search(r'\(?(\d+)\)?\S?', s)
+    def parse(s: str) -> Optional["Reference"]:
+        numbering_match = regex.match(r"\d+\.?\s", s)
+        if numbering_match:
+            numbering = numbering_match.group(0)
+            s = s[numbering_match.end() :]
+        else:
+            numbering = None
+        year_match = regex.search(r"\(?(\d+)\)?\S?", s)
         if not year_match:
             return None
         year_start, year_end = year_match.span()
@@ -114,7 +131,7 @@ class Reference:
         year = int(year_match.group(1))
         article = s[year_end:]
         try:
-            return Reference(Reference.parse_authors(authors), year, article)
+            return Reference(numbering, Reference.parse_authors(authors), year, article)
         except IndexError:  # parts.pop in extract_author
             return None
 
