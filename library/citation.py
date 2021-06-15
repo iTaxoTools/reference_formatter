@@ -42,9 +42,9 @@ class YearFormat(IntEnum):
 
 
 class Options(Enum):
-    InitialsBefore = (
-        bool, "Place initials before surname (except first name)")
+    InitialsBefore = (bool, "Place initials before surname (except first name)")
     InitialsNoPeriod = (bool, "Write initials without abbreviating period")
+    KeepNumbering = (bool, "Keep numbering of references")
     LastNameSep = (LastSeparator, "Precede last name with:")
     YearFormat = (YearFormat, "Format year as:")
 
@@ -54,6 +54,18 @@ class Options(Enum):
 
 
 OptionsDict = Dict[Options, Any]
+
+
+def default_options() -> OptionsDict:
+    result: OptionsDict = {}
+    for option in list(Options):
+        if option.type is bool:
+            result[option] = False
+        elif issubclass(option.type, IntEnum):
+            result[option] = option.type(0)
+        else:
+            assert False
+    return result
 
 
 class Author:
@@ -73,7 +85,10 @@ class Author:
 
 
 class Reference:
-    def __init__(self, authors: List[Author], year: int, article: str):
+    def __init__(
+        self, numbering: Optional[str], authors: List[Author], year: int, article: str
+    ):
+        self.numbering = numbering
         self.authors = authors
         self.year = year
         self.article = article
@@ -81,21 +96,41 @@ class Reference:
     def format_authors(self, options: OptionsDict):
         if not self.authors:
             return ""
-        formatted_authors = (author.format_author(options, i == 0)
-                             for i, author in enumerate(self.authors))
+        formatted_authors = (
+            author.format_author(options, i == 0)
+            for i, author in enumerate(self.authors)
+        )
         *authors, last_author = formatted_authors
         if not authors:
             return last_author
         else:
-            return ", ".join(authors) + \
-                str(options[Options.LastNameSep]) + last_author
+            return ", ".join(authors) + str(options[Options.LastNameSep]) + last_author
+
+    def format_numbering(self, options: OptionsDict) -> str:
+        if options[Options.KeepNumbering] and self.numbering:
+            return self.numbering
+        else:
+            return ""
 
     def format_reference(self, options: OptionsDict):
-        return self.format_authors(options) + " " + options[Options.YearFormat].format_year(self.year) + " " + self.article
+        return (
+            self.format_numbering(options)
+            + self.format_authors(options)
+            + " "
+            + options[Options.YearFormat].format_year(self.year)
+            + " "
+            + self.article
+        )
 
     @staticmethod
-    def parse(s: str) -> Optional['Reference']:
-        year_match = regex.search(r'\(?(\d+)\)?\S?', s)
+    def parse(s: str) -> Optional["Reference"]:
+        numbering_match = regex.match(r"\d+\.?\s", s)
+        if numbering_match:
+            numbering = numbering_match.group(0)
+            s = s[numbering_match.end() :]
+        else:
+            numbering = None
+        year_match = regex.search(r"\(?(\d+)\)?\S?", s)
         if not year_match:
             return None
         year_start, year_end = year_match.span()
@@ -103,7 +138,7 @@ class Reference:
         year = int(year_match.group(1))
         article = s[year_end:]
         try:
-            return Reference(Reference.parse_authors(authors), year, article)
+            return Reference(numbering, Reference.parse_authors(authors), year, article)
         except IndexError:  # parts.pop in extract_author
             return None
 
@@ -115,16 +150,16 @@ class Reference:
             parts_rest, sep, last_part = s.partition(lastsep)
             if sep:
                 break
-        parts = [part for part in parts_rest.split(
-            ", ") + last_part.split(", ") if part]
+        parts = [
+            part for part in parts_rest.split(", ") + last_part.split(", ") if part
+        ]
         return [author for author in Reference.extract_author(parts)]
 
     @staticmethod
     def extract_author(parts: List[str]) -> Iterator[Author]:
         while parts:
             part = parts.pop(0)
-            find_surname = regex.search(
-                r'[[:upper:]][[:lower:]\'].*[[:lower:]]', part)
+            find_surname = regex.search(r"[[:upper:]][[:lower:]\'].*[[:lower:]]", part)
             if not find_surname:
                 initials = part
                 surname = parts.pop(0)
@@ -133,11 +168,11 @@ class Reference:
                 initials = parts.pop(0)
             elif find_surname.start() == 0:
                 surname = find_surname.group()
-                initials = part[find_surname.end() + 1:]
+                initials = part[find_surname.end() + 1 :]
             else:
                 surname = find_surname.group()
-                initials = part[:find_surname.start() - 1]
-            yield(Author(surname, initials))
+                initials = part[: find_surname.start() - 1]
+            yield (Author(surname, initials))
 
 
 def process_reference_file(input: TextIO, output_dir: str, options: OptionsDict):
@@ -145,7 +180,7 @@ def process_reference_file(input: TextIO, output_dir: str, options: OptionsDict)
         for line in input:
             reference = Reference.parse(line)
             if reference is None:
-                outfile.write('*')
+                outfile.write("*")
                 outfile.write(line)
                 continue
             outfile.write(reference.format_reference(options))
