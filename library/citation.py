@@ -99,12 +99,18 @@ def parse_doi(line: str) -> Tuple[str, Optional[str]]:
 
 class Reference:
     def __init__(
-        self, numbering: Optional[str], authors: List[Author], year: int, article: str
+        self,
+        numbering: Optional[str],
+        authors: List[Author],
+        year: int,
+        article: str,
+        doi: Optional[str],
     ):
         self.numbering = numbering
         self.authors = authors
         self.year = year
         self.article = article
+        self.doi = doi
 
     def format_authors(self, options: OptionsDict):
         if not self.authors:
@@ -137,6 +143,7 @@ class Reference:
 
     @staticmethod
     def parse(s: str) -> Optional["Reference"]:
+        s, doi = parse_doi(s)
         numbering_match = regex.match(r"\d+\.?\s", s)
         if numbering_match:
             numbering = numbering_match.group(0)
@@ -151,7 +158,9 @@ class Reference:
         year = int(year_match.group(1))
         article = s[year_end:]
         try:
-            return Reference(numbering, Reference.parse_authors(authors), year, article)
+            return Reference(
+                numbering, Reference.parse_authors(authors), year, article, doi
+            )
         except IndexError:  # parts.pop in extract_author
             return None
 
