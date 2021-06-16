@@ -45,6 +45,7 @@ class Options(Enum):
     InitialsBefore = (bool, "Place initials before surname (except first name)")
     InitialsNoPeriod = (bool, "Write initials without abbreviating period")
     KeepNumbering = (bool, "Keep numbering of references")
+    RemoveDoi = (bool, "Remove doi")
     LastNameSep = (LastSeparator, "Precede last name with:")
     YearFormat = (YearFormat, "Format year as:")
 
@@ -131,6 +132,12 @@ class Reference:
         else:
             return ""
 
+    def format_doi(self, options: OptionsDict) -> str:
+        if options[Options.RemoveDoi]:
+            return ""
+        else:
+            return self.doi or ""
+
     def format_reference(self, options: OptionsDict):
         return (
             self.format_numbering(options)
@@ -139,7 +146,7 @@ class Reference:
             + options[Options.YearFormat].format_year(self.year)
             + " "
             + self.article
-            + (self.doi or "")
+            + self.format_doi(options)
         )
 
     @staticmethod
