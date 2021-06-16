@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from enum import IntEnum, Enum
-from typing import Dict, List, Optional, Iterator, Any, TextIO
+from typing import Dict, List, Optional, Iterator, Any, TextIO, Tuple, Union
 import os
 
 import regex
@@ -45,6 +45,7 @@ class Options(Enum):
     InitialsBefore = (bool, "Place initials before surname (except first name)")
     InitialsNoPeriod = (bool, "Write initials without abbreviating period")
     KeepNumbering = (bool, "Keep numbering of references")
+    RemoveDoi = (bool, "Remove doi")
     LastNameSep = (LastSeparator, "Precede last name with:")
     YearFormat = (YearFormat, "Format year as:")
 
@@ -84,14 +85,33 @@ class Author:
             return self.surname + ", " + initials
 
 
+def parse_doi(line: str) -> Tuple[str, Optional[str]]:
+    """
+    Parses line as line == rest + doi and returns (rest, doi).
+    Returns (line, None) is the line doesn't contain doi
+    """
+    doi_regex = regex.compile(r"https?:.*doi.*$|\bdoi: ?[^ ]*$")
+    doi_match = doi_regex.search(line)
+    if doi_match:
+        return (line[: doi_match.start()], doi_match.group(0))
+    else:
+        return (line, None)
+
+
 class Reference:
     def __init__(
-        self, numbering: Optional[str], authors: List[Author], year: int, article: str
+        self,
+        numbering: Optional[str],
+        authors: List[Author],
+        year: int,
+        article: str,
+        doi: Optional[str],
     ):
         self.numbering = numbering
         self.authors = authors
         self.year = year
         self.article = article
+        self.doi = doi
 
     def format_authors(self, options: OptionsDict):
         if not self.authors:
@@ -112,6 +132,12 @@ class Reference:
         else:
             return ""
 
+    def format_doi(self, options: OptionsDict) -> str:
+        if options[Options.RemoveDoi]:
+            return ""
+        else:
+            return self.doi or ""
+
     def format_reference(self, options: OptionsDict):
         return (
             self.format_numbering(options)
@@ -120,10 +146,12 @@ class Reference:
             + options[Options.YearFormat].format_year(self.year)
             + " "
             + self.article
+            + self.format_doi(options)
         )
 
     @staticmethod
     def parse(s: str) -> Optional["Reference"]:
+        s, doi = parse_doi(s)
         numbering_match = regex.match(r"\d+\.?\s", s)
         if numbering_match:
             numbering = numbering_match.group(0)
@@ -138,7 +166,9 @@ class Reference:
         year = int(year_match.group(1))
         article = s[year_end:]
         try:
-            return Reference(numbering, Reference.parse_authors(authors), year, article)
+            return Reference(
+                numbering, Reference.parse_authors(authors), year, article, doi
+            )
         except IndexError:  # parts.pop in extract_author
             return None
 
@@ -175,12 +205,30 @@ class Reference:
             yield (Author(surname, initials))
 
 
+def parse_line(line: str) -> Union[Optional[Reference], str]:
+    (rest, doi) = parse_doi(line)
+    if not rest and doi:
+        return doi
+    else:
+        return Reference.parse(line)
+
+
 def process_reference_file(input: TextIO, output_dir: str, options: OptionsDict):
     with open(os.path.join(output_dir, "output"), mode="w") as outfile:
+        prev_reference = None
         for line in input:
-            reference = Reference.parse(line)
-            if reference is None:
-                outfile.write("*")
-                outfile.write(line)
+            line = line.rstrip()
+            if not line:
                 continue
-            outfile.write(reference.format_reference(options))
+            parsed_line = parse_line(line)
+            if isinstance(parsed_line, str) and prev_reference:  # line is doi
+                prev_reference.doi = "\n" + parsed_line
+                print(prev_reference.format_reference(options), file=outfile)
+                prev_reference = None
+            elif isinstance(parsed_line, Reference):
+                if prev_reference:
+                    print(prev_reference.format_reference(options), file=outfile)
+                prev_reference = parsed_line
+            else:
+                print("*", line, sep="", file=outfile)
+                continue
