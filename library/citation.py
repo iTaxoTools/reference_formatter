@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from enum import IntEnum, Enum
-from typing import Dict, List, Optional, Iterator, Any, TextIO
+from typing import Dict, List, Optional, Iterator, Any, TextIO, Tuple
 import os
 
 import regex
@@ -82,6 +82,19 @@ class Author:
             return initials + " " + self.surname
         else:
             return self.surname + ", " + initials
+
+
+def parse_doi(line: str) -> Tuple[str, Optional[str]]:
+    """
+    Parses line as line == rest + doi and returns (rest, doi).
+    Returns (line, None) is the line doesn't contain doi
+    """
+    doi_regex = regex.compile(r"https?:.*doi.*$|\bdoi: ?[^ ]*$")
+    doi_match = doi_regex.search(line)
+    if doi_match:
+        return (line[: doi_match.start()], doi_match.group(0))
+    else:
+        return (line, None)
 
 
 class Reference:
