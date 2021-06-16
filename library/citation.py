@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from enum import IntEnum, Enum
-from typing import Dict, List, Optional, Iterator, Any, TextIO, Tuple
+from typing import Dict, List, Optional, Iterator, Any, TextIO, Tuple, Union
 import os
 
 import regex
@@ -139,6 +139,7 @@ class Reference:
             + options[Options.YearFormat].format_year(self.year)
             + " "
             + self.article
+            + (self.doi or "")
         )
 
     @staticmethod
@@ -197,12 +198,30 @@ class Reference:
             yield (Author(surname, initials))
 
 
+def parse_line(line: str) -> Union[Optional[Reference], str]:
+    (rest, doi) = parse_doi(line)
+    if not rest and doi:
+        return doi
+    else:
+        return Reference.parse(line)
+
+
 def process_reference_file(input: TextIO, output_dir: str, options: OptionsDict):
     with open(os.path.join(output_dir, "output"), mode="w") as outfile:
+        prev_reference = None
         for line in input:
-            reference = Reference.parse(line)
-            if reference is None:
-                outfile.write("*")
-                outfile.write(line)
+            line = line.rstrip()
+            if not line:
                 continue
-            outfile.write(reference.format_reference(options))
+            parsed_line = parse_line(line)
+            if isinstance(parsed_line, str) and prev_reference:  # line is doi
+                prev_reference.doi = "\n" + parsed_line
+                print(prev_reference.format_reference(options), file=outfile)
+                prev_reference = None
+            elif isinstance(parsed_line, Reference):
+                if prev_reference:
+                    print(prev_reference.format_reference(options), file=outfile)
+                prev_reference = parsed_line
+            else:
+                print("*", line, sep="", file=outfile)
+                continue
