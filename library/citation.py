@@ -162,14 +162,32 @@ class Reference:
         if not year_match:
             return None
         year_start, year_end = year_match.span()
-        authors = s[:year_start]
+        if year_end == len(s):
+            authors_article = Reference.split_three_words(s[:year_start])
+            if authors_article:
+                authors, article = authors_article
+            else:
+                return None
+        else:
+            authors = s[:year_start]
+            article = s[year_end:]
         year = int(year_match.group(1))
-        article = s[year_end:]
         try:
             return Reference(
                 numbering, Reference.parse_authors(authors), year, article, doi
             )
         except IndexError:  # parts.pop in extract_author
+            return None
+
+    @staticmethod
+    def split_three_words(s: str) -> Optional[Tuple[str, str]]:
+        three_words_regex = regex.compile(
+            r"[^\s.]*[[:lower:]][^\s.]*\s+[^\s.]*[[:lower:]][^\s.]*\s+[^\s.]*[[:lower:]][^\s.]*"
+        )
+        three_words_match = three_words_regex.search(s)
+        if three_words_regex:
+            return s[: three_words_match.start()], s[three_words_match.start() :]
+        else:
             return None
 
     @staticmethod
