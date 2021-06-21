@@ -105,12 +105,14 @@ class Reference:
         authors: List[Author],
         year: int,
         article: str,
+        page_range: Optional[Tuple[str, str]],
         doi: Optional[str],
     ):
         self.numbering = numbering
         self.authors = authors
         self.year = year
         self.article = article
+        self.page_range = page_range
         self.doi = doi
 
     def format_authors(self, options: OptionsDict):
@@ -176,9 +178,26 @@ class Reference:
             authors = s[:year_start]
             article = s[year_end:]
             year = int(year_match.group(1))
+        page_range_regex = regex.compile(
+            r"(?:pp.)?\s*([A-Za-z]*\d+)\s?[-‐‑‒–—―]\s?([A-Za-z]*\d+)\s*$"
+        )
+        page_range_match = page_range_regex.search(article)
+        if page_range_match:
+            article = article[: page_range_match.start()]
+            page_range = (
+                page_range_match.group(1),
+                page_range_match.group(2),
+            )
+        else:
+            page_range = None
         try:
             return Reference(
-                numbering, Reference.parse_authors(authors), year, article, doi
+                numbering,
+                Reference.parse_authors(authors),
+                year,
+                article,
+                page_range,
+                doi,
             )
         except IndexError:  # parts.pop in extract_author
             return None
