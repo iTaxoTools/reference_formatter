@@ -158,20 +158,24 @@ class Reference:
             s = s[numbering_match.end() :]
         else:
             numbering = None
-        year_match = regex.search(r"\(?(\d+)\)?\S?", s)
-        if not year_match:
-            return None
-        year_start, year_end = year_match.span()
-        if year_end == len(s):
-            authors_article = Reference.split_three_words(s[:year_start])
+        terminal_year_match = regex.search(r"\(?(\d+)\)?\S?$", s)
+        if terminal_year_match:
+            authors_article = Reference.split_three_words(
+                s[: terminal_year_match.start()]
+            )
             if authors_article:
                 authors, article = authors_article
             else:
                 return None
+            year = int(terminal_year_match.group(1))
         else:
+            year_match = regex.search(r"\(?(\d+)\)?\S?", s)
+            year_start, year_end = year_match.span()
+            if not year_match:
+                return None
             authors = s[:year_start]
             article = s[year_end:]
-        year = int(year_match.group(1))
+            year = int(year_match.group(1))
         try:
             return Reference(
                 numbering, Reference.parse_authors(authors), year, article, doi
