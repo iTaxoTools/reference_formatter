@@ -8,6 +8,10 @@ import regex
 resource_path = getattr(sys, "_MEIPASS", sys.path[0])
 
 
+def journal_regex() -> regex.Pattern:
+    return make_regex(fill_missing(load()))
+
+
 def load() -> pd.DataFrame:
     path = os.path.join(resource_path, "data", "Journal_abbreviations.csv")
     return pd.read_table(path, dtype=str)
