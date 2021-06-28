@@ -6,6 +6,8 @@ import os
 
 import regex
 
+from library.utils import *
+
 
 class LastSeparator(IntEnum):
     Comma = 0
@@ -289,7 +291,7 @@ def process_reference_file(input: TextIO, output_dir: str, options: OptionsDict)
     with open(os.path.join(output_dir, "output"), mode="w") as outfile:
         prev_reference = None
         for line in input:
-            line = line.rstrip()
+            line = normalize_space(line.rstrip())
             if not line:
                 continue
             parsed_line = parse_line(line)
