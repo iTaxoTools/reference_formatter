@@ -2,7 +2,7 @@
 
 import sys
 import os
-from typing import Tuple, List
+from typing import Tuple, List, Dict
 from enum import Enum
 
 import pandas as pd
@@ -20,8 +20,19 @@ class NameForm(Enum):
     WithPeriodsNoSpace = 3
 
 
-def journal_matcher() -> Tuple[pd.DataFrame, AhoCorasick]:
-    return make_matcher(fill_missing(load()))
+N_NAME_FORMS = len(NameForm)
+
+
+class JournalMatcher:
+    def __init__(self) -> None:
+        self.table, self.matcher = make_matcher(fill_missing(load()))
+
+    def extract_journal(self, s: str) -> Tuple[str, Dict[NameForm, str], str]:
+        *_, (match_num, _, _) = self.matcher.find_matches_as_indexes(s)
+        journal_names = dict(self.table.iloc[match_num // N_NAME_FORMS])
+        journal_name = journal_names[NameForm(match_num % N_NAME_FORMS)]
+        prefix, _, suffix = s.partition(journal_name)
+        return prefix, journal_names, suffix
 
 
 def load() -> pd.DataFrame:
