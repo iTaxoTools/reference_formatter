@@ -2,19 +2,38 @@
 
 import sys
 import os
+from typing import Tuple, List
+from enum import Enum
+
 import pandas as pd
-import regex
+from ahocorasick_rs import AhoCorasick, MATCHKIND_LEFTMOST_LONGEST
+
+from library.utils import *
 
 resource_path = getattr(sys, "_MEIPASS", sys.path[0])
 
 
-def journal_regex() -> regex.Pattern:
-    return make_regex(fill_missing(load()))
+class NameForm(Enum):
+    FullName = 0
+    WithPeriods = 1
+    Abbrev = 2
+    WithPeriodsNoSpace = 3
+
+
+def journal_matcher() -> Tuple[pd.DataFrame, AhoCorasick]:
+    return make_matcher(fill_missing(load()))
 
 
 def load() -> pd.DataFrame:
     path = os.path.join(resource_path, "data", "Journal_abbreviations.csv")
-    return pd.read_table(path, dtype=str)
+
+    return pd.read_table(path, dtype=str).rename(
+        columns={
+            "Full name accepted": NameForm.FullName,
+            "Abbreviation with periods accepted": NameForm.WithPeriods,
+            "Abbreviation without periods accepted": NameForm.Abbrev,
+        }
+    )
 
 
 def fill_missing(table: pd.DataFrame) -> pd.DataFrame:
@@ -23,10 +42,20 @@ def fill_missing(table: pd.DataFrame) -> pd.DataFrame:
     return table
 
 
-def make_regex(table: pd.DataFrame) -> regex.Pattern:
-    table = table.applymap(lambda s: regex.escape(s, literal_spaces=True))
-    table["Abbreviation with periods accepted"] = table[
-        "Abbreviation with periods accepted"
-    ].str.replace(r"\\\.\s*", r"\.\s*")
-    column_regexes = [table[column].str.cat(None, sep="|") for column in table.columns]
-    return regex.compile("|".join(column_regexes))
+def make_matcher(table: pd.DataFrame) -> Tuple[pd.DataFrame, AhoCorasick]:
+    # normalize spaces
+    table = table.applymap(normalize_space)
+    # make sure there are spaces after every period in abbrev_period
+    table[NameForm.WithPeriods] = table[NameForm.WithPeriods].str.replace(
+        r"\.(?=\S)", ". "
+    )
+    # create column with for abbreviations with no spaces after the period
+    table[NameForm.WithPeriodsNoSpace] = table[NameForm.WithPeriods].str.replace(
+        r"\.\s", "."
+    )
+    # confirm columns order
+    table = table[list(NameForm)]
+    patterns: List[str] = []
+    for _, row in table.iterrows():
+        patterns.extend(row)
+    return (table, AhoCorasick(patterns, matchkind=MATCHKIND_LEFTMOST_LONGEST))
