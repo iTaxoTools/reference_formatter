@@ -3,7 +3,7 @@
 import sys
 import os
 from typing import Tuple, List, Dict, Optional
-from enum import Enum
+from enum import IntEnum
 
 import pandas as pd
 from ahocorasick_rs import AhoCorasick, MATCHKIND_LEFTMOST_LONGEST
@@ -13,11 +13,19 @@ from library.utils import *
 resource_path = getattr(sys, "_MEIPASS", sys.path[0])
 
 
-class NameForm(Enum):
+class NameForm(IntEnum):
     FullName = 0
     WithPeriods = 1
     Abbrev = 2
     WithPeriodsNoSpace = 3
+
+    def __str__(self) -> str:
+        return [
+            "Full name",
+            "Abbreviation with periods",
+            "Abbreviation without periods",
+            "Abbreviation without spaces",
+        ][self]
 
 
 N_NAME_FORMS = len(NameForm)

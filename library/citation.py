@@ -72,6 +72,7 @@ class Options(Enum):
     RemoveDoi = (bool, "Remove doi")
     LastNameSep = (LastSeparator, "Precede last name with:")
     YearFormat = (YearFormat, "Format year as:")
+    JournalNameForm = (NameForm, "Represent journal name as:")
     PageRangeSeparator = (PageSeparator, "Use as page range separator")
 
     def __init__(self, type: type, description: str):
@@ -169,6 +170,13 @@ class Reference:
         else:
             return self.doi or ""
 
+    def format_journal(self, options: OptionsDict) -> str:
+        if self.journal:
+            assert self.journal_issue is not None
+            return self.journal[options[Options.JournalNameForm]] + self.journal_issue
+        else:
+            return ""
+
     def format_page_range(self, options: OptionsDict) -> str:
         if self.page_range:
             return options[Options.PageRangeSeparator].format_range(self.page_range)
@@ -183,6 +191,8 @@ class Reference:
             + options[Options.YearFormat].format_year(self.year)
             + " "
             + self.article
+            + " "
+            + self.format_journal(options)
             + " "
             + self.format_page_range(options)
             + " "
