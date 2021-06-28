@@ -9,10 +9,10 @@ from enum import IntEnum
 import os
 
 from library.citation import Options, OptionsDict, process_reference_file
+from library.journal_list import JournalMatcher
 
 
 class FmtParameters(ttk.LabelFrame):
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.get_options: Dict[Options, Union[tk.Variable, ttk.Combobox]] = {}
@@ -22,12 +22,15 @@ class FmtParameters(ttk.LabelFrame):
                 var = tk.BooleanVar(self, value=False)
                 self.get_options[option] = var
                 ttk.Checkbutton(self, text=option.description, variable=var).grid(
-                    row=row, column=0, sticky="w", columnspan=2)
+                    row=row, column=0, sticky="w", columnspan=2
+                )
             elif issubclass(option.type, IntEnum):
                 ttk.Label(self, text=option.description).grid(
-                    row=row, column=0, sticky="w")
-                cmbox = ttk.Combobox(self, state='readonly', values=list(
-                    map(str, list(option.type))))
+                    row=row, column=0, sticky="w"
+                )
+                cmbox = ttk.Combobox(
+                    self, state="readonly", values=list(map(str, list(option.type)))
+                )
                 cmbox.current(0)
                 cmbox.grid(row=row, column=1, sticky="w")
                 self.get_options[option] = cmbox
@@ -46,9 +49,9 @@ class FmtParameters(ttk.LabelFrame):
 
 
 class FmtGui(ttk.Frame):
-
     def __init__(self, *args, **kwargs):
         self.preview_dir = kwargs.pop("preview_dir")
+        self.journal_matcher = JournalMatcher()
         super().__init__(*args, **kwargs)
         self.create_top_frame()
         self.parameters_frame = FmtParameters(self, text="Parameters")
@@ -57,11 +60,13 @@ class FmtGui(ttk.Frame):
         self.top_frame.grid(row=0, column=0, sticky="nwse", columnspan=2)
 
         ttk.Label(self, text="Input file").grid(
-            row=1, column=0, sticky="w", columnspan=2)
+            row=1, column=0, sticky="w", columnspan=2
+        )
 
         self.input_file = tk.StringVar()
         ttk.Entry(self, textvariable=self.input_file).grid(
-            row=2, column=0, sticky="we", columnspan=2)
+            row=2, column=0, sticky="we", columnspan=2
+        )
 
         self.parameters_frame.grid(row=3, column=0, sticky="nsew")
         self.preview_frame.grid(row=3, column=1, sticky="nsew")
@@ -76,15 +81,18 @@ class FmtGui(ttk.Frame):
         self.top_frame.rowconfigure(0, weight=1)
         self.top_frame.columnconfigure(3, weight=1)
 
-        ttk.Button(self.top_frame, text="Open",
-                   command=self.open_command).grid(row=0, column=0)
-        ttk.Button(self.top_frame, text="Save",
-                   command=self.save_command).grid(row=0, column=1)
-        ttk.Button(self.top_frame, text="Run",
-                   command=self.run_command).grid(row=0, column=2)
+        ttk.Button(self.top_frame, text="Open", command=self.open_command).grid(
+            row=0, column=0
+        )
+        ttk.Button(self.top_frame, text="Save", command=self.save_command).grid(
+            row=0, column=1
+        )
+        ttk.Button(self.top_frame, text="Run", command=self.run_command).grid(
+            row=0, column=2
+        )
 
     def clear_command(self) -> None:
-        self.preview.delete('1.0', 'end')
+        self.preview.delete("1.0", "end")
 
     def open_command(self) -> None:
         input_path = tkfiledialog.askopenfilename()
@@ -95,22 +103,25 @@ class FmtGui(ttk.Frame):
         output_path = tkfiledialog.asksaveasfilename()
         if output_path:
             with open(output_path, mode="w") as outfile:
-                outfile.write(self.preview.get('1.0', 'end'))
+                outfile.write(self.preview.get("1.0", "end"))
 
     def make_preview(self) -> None:
         preview_file_path = os.path.join(self.preview_dir, "output")
         with open(preview_file_path) as preview_file:
-            self.preview.insert('1.0', preview_file.read())
+            self.preview.insert("1.0", preview_file.read())
 
     def run_command(self) -> None:
         self.clear_command()
         options = self.parameters_frame.get()
         try:
-            with open(self.input_file.get(), errors='replace') as infile:
-                process_reference_file(infile, self.preview_dir, options)
+            with open(self.input_file.get(), errors="replace") as infile:
+                process_reference_file(
+                    infile, self.preview_dir, options, self.journal_matcher
+                )
         except FileNotFoundError:
             tkmessagebox.showerror(
-                "Error", f"File {self.input_file.get()} cannot be opened")
+                "Error", f"File {self.input_file.get()} cannot be opened"
+            )
         else:
             self.make_preview()
             tkmessagebox.showinfo("Done", "Processing is complete")
@@ -120,16 +131,17 @@ class FmtGui(ttk.Frame):
         self.preview_frame.rowconfigure(0, weight=1)
         self.preview_frame.columnconfigure(0, weight=1)
 
-        self.preview = tk.Text(
-            self.preview_frame, height=15, width=30, wrap="none")
+        self.preview = tk.Text(self.preview_frame, height=15, width=30, wrap="none")
         self.preview.grid(row=0, column=0, sticky="nsew")
 
         yscroll = ttk.Scrollbar(
-            self.preview_frame, orient='vertical', command=self.preview.yview)
+            self.preview_frame, orient="vertical", command=self.preview.yview
+        )
         self.preview.config(yscrollcommand=yscroll.set)
         yscroll.grid(row=0, column=1, sticky="nsew")
 
         xscroll = ttk.Scrollbar(
-            self.preview_frame, orient='horizontal', command=self.preview.xview)
+            self.preview_frame, orient="horizontal", command=self.preview.xview
+        )
         self.preview.config(xscrollcommand=xscroll.set)
         xscroll.grid(row=1, column=0, sticky="nsew")
