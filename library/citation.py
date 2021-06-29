@@ -41,6 +41,27 @@ class YearFormat(IntEnum):
         return self.format_year(1998)
 
 
+class PageSeparator(IntEnum):
+    Minus = 0
+    Hyphen = 1
+    FigureDash = 2
+    EnDash = 3
+    EmDash = 4
+
+    def __str__(self) -> str:
+        return [
+            "Minus sign: -",
+            "Hyphen: ‐",
+            "Figure dash: ‒",
+            "En dash: –",
+            "Em dash: —",
+        ][self]
+
+    def format_range(self, range: Tuple[str, str]) -> str:
+        start, end = range
+        return start + "-‐‒–—"[self] + end
+
+
 class Options(Enum):
     InitialsBefore = (bool, "Place initials before surname (except first name)")
     InitialsNoPeriod = (bool, "Write initials without abbreviating period")
@@ -48,6 +69,7 @@ class Options(Enum):
     RemoveDoi = (bool, "Remove doi")
     LastNameSep = (LastSeparator, "Precede last name with:")
     YearFormat = (YearFormat, "Format year as:")
+    PageRangeSeparator = (PageSeparator, "Use as page range separator")
 
     def __init__(self, type: type, description: str):
         self.type = type
@@ -105,12 +127,14 @@ class Reference:
         authors: List[Author],
         year: int,
         article: str,
+        page_range: Optional[Tuple[str, str]],
         doi: Optional[str],
     ):
         self.numbering = numbering
         self.authors = authors
         self.year = year
         self.article = article
+        self.page_range = page_range
         self.doi = doi
 
     def format_authors(self, options: OptionsDict):
@@ -138,6 +162,12 @@ class Reference:
         else:
             return self.doi or ""
 
+    def format_page_range(self, options: OptionsDict) -> str:
+        if self.page_range:
+            return options[Options.PageRangeSeparator].format_range(self.page_range)
+        else:
+            return ""
+
     def format_reference(self, options: OptionsDict):
         return (
             self.format_numbering(options)
@@ -146,6 +176,9 @@ class Reference:
             + options[Options.YearFormat].format_year(self.year)
             + " "
             + self.article
+            + " "
+            + self.format_page_range(options)
+            + " "
             + self.format_doi(options)
         )
 
@@ -158,7 +191,7 @@ class Reference:
             s = s[numbering_match.end() :]
         else:
             numbering = None
-        terminal_year_match = regex.search(r"\(?(\d+)\)?\S?$", s)
+        terminal_year_match = regex.search(r"\((\d+)\)\S?$", s)
         if terminal_year_match:
             authors_article = Reference.split_three_words(
                 s[: terminal_year_match.start()]
@@ -176,9 +209,26 @@ class Reference:
             authors = s[:year_start]
             article = s[year_end:]
             year = int(year_match.group(1))
+        page_range_regex = regex.compile(
+            r"(?:pp\.)?\s*([A-Za-z]*\d+)\s?[-‐‑‒–—―]\s?([A-Za-z]*\d+)\S?\s*$"
+        )
+        page_range_match = page_range_regex.search(article)
+        if page_range_match:
+            article = article[: page_range_match.start()]
+            page_range = (
+                page_range_match.group(1),
+                page_range_match.group(2),
+            )
+        else:
+            page_range = None
         try:
             return Reference(
-                numbering, Reference.parse_authors(authors), year, article, doi
+                numbering,
+                Reference.parse_authors(authors),
+                year,
+                article,
+                page_range,
+                doi,
             )
         except IndexError:  # parts.pop in extract_author
             return None
