@@ -6,6 +6,9 @@ import os
 
 import regex
 
+from library.utils import *
+from library.journal_list import JournalMatcher, NameForm
+
 
 class LastSeparator(IntEnum):
     Comma = 0
@@ -69,6 +72,7 @@ class Options(Enum):
     RemoveDoi = (bool, "Remove doi")
     LastNameSep = (LastSeparator, "Precede last name with:")
     YearFormat = (YearFormat, "Format year as:")
+    JournalNameForm = (NameForm, "Represent journal name as:")
     PageRangeSeparator = (PageSeparator, "Use as page range separator")
 
     def __init__(self, type: type, description: str):
@@ -127,6 +131,8 @@ class Reference:
         authors: List[Author],
         year: int,
         article: str,
+        journal: Optional[Dict[NameForm, str]],
+        journal_issue: Optional[str],
         page_range: Optional[Tuple[str, str]],
         doi: Optional[str],
     ):
@@ -134,6 +140,8 @@ class Reference:
         self.authors = authors
         self.year = year
         self.article = article
+        self.journal = journal
+        self.journal_issue = journal_issue
         self.page_range = page_range
         self.doi = doi
 
@@ -162,6 +170,13 @@ class Reference:
         else:
             return self.doi or ""
 
+    def format_journal(self, options: OptionsDict) -> str:
+        if self.journal:
+            assert self.journal_issue is not None
+            return self.journal[options[Options.JournalNameForm]] + self.journal_issue
+        else:
+            return ""
+
     def format_page_range(self, options: OptionsDict) -> str:
         if self.page_range:
             return options[Options.PageRangeSeparator].format_range(self.page_range)
@@ -177,13 +192,17 @@ class Reference:
             + " "
             + self.article
             + " "
+            + self.format_journal(options)
+            + " "
             + self.format_page_range(options)
             + " "
             + self.format_doi(options)
         )
 
     @staticmethod
-    def parse(s: str) -> Optional["Reference"]:
+    def parse(
+        s: str, journal_matcher: Optional[JournalMatcher]
+    ) -> Optional["Reference"]:
         s, doi = parse_doi(s)
         numbering_match = regex.match(r"\d+\.?\s", s)
         if numbering_match:
@@ -221,12 +240,20 @@ class Reference:
             )
         else:
             page_range = None
+        if journal_matcher:
+            article, journal, journal_issue = journal_matcher.extract_journal(article)
+            journal_issue = journal_issue or None
+        else:
+            journal = None
+            journal_issue = None
         try:
             return Reference(
                 numbering,
                 Reference.parse_authors(authors),
                 year,
                 article,
+                journal,
+                journal_issue,
                 page_range,
                 doi,
             )
@@ -277,22 +304,29 @@ class Reference:
             yield (Author(surname, initials))
 
 
-def parse_line(line: str) -> Union[Optional[Reference], str]:
+def parse_line(
+    line: str, journal_matcher: Optional[JournalMatcher]
+) -> Union[Optional[Reference], str]:
     (rest, doi) = parse_doi(line)
     if not rest and doi:
         return doi
     else:
-        return Reference.parse(line)
+        return Reference.parse(line, journal_matcher)
 
 
-def process_reference_file(input: TextIO, output_dir: str, options: OptionsDict):
+def process_reference_file(
+    input: TextIO,
+    output_dir: str,
+    options: OptionsDict,
+    journal_matcher: Optional[JournalMatcher],
+):
     with open(os.path.join(output_dir, "output"), mode="w") as outfile:
         prev_reference = None
         for line in input:
-            line = line.rstrip()
+            line = normalize_space(line.rstrip())
             if not line:
                 continue
-            parsed_line = parse_line(line)
+            parsed_line = parse_line(line, journal_matcher)
             if isinstance(parsed_line, str) and prev_reference:  # line is doi
                 prev_reference.doi = "\n" + parsed_line
                 print(prev_reference.format_reference(options), file=outfile)
