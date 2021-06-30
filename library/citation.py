@@ -222,9 +222,9 @@ class Reference:
             year = int(terminal_year_match.group(1))
         else:
             year_match = regex.search(r"\(?(\d+)\)?\S?", s)
-            year_start, year_end = year_match.span()
             if not year_match:
                 return None
+            year_start, year_end = year_match.span()
             authors = s[:year_start]
             article = s[year_end:]
             year = int(year_match.group(1))
