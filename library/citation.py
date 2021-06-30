@@ -304,7 +304,7 @@ class Reference:
                 yield (Author())
                 continue
             find_surname = regex.search(
-                r"[[:upper:]][[:lower:]\'\u2019].*[[:lower:]]", part
+                r"\p{Alpha}[\p{Lower}\'\u2019].*\p{Lower}", part
             )
             if not find_surname:
                 initials = part
