@@ -249,7 +249,7 @@ class Reference:
         try:
             return Reference(
                 numbering,
-                Reference.parse_authors(authors),
+                Reference.parse_authors(authors.strip()),
                 year,
                 article,
                 journal,
@@ -281,7 +281,9 @@ class Reference:
             if sep:
                 break
         parts = [
-            part for part in parts_rest.split(", ") + last_part.split(", ") if part
+            part.strip()
+            for part in parts_rest.split(",") + last_part.split(",")
+            if part
         ]
         return [author for author in Reference.extract_author(parts)]
 
