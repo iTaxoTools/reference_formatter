@@ -357,3 +357,5 @@ def process_reference_file(
             else:
                 print("*", line, sep="", file=outfile)
                 continue
+        if prev_reference:
+            print(prev_reference.format_reference(options), file=outfile)
