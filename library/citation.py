@@ -258,6 +258,7 @@ class Reference:
                 doi,
             )
         except IndexError:  # parts.pop in extract_author
+            print("Unexpected name:\n", authors)
             return None
 
     @staticmethod
