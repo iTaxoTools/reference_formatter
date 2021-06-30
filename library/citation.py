@@ -323,6 +323,8 @@ def process_reference_file(
     with open(os.path.join(output_dir, "output"), mode="w") as outfile:
         prev_reference = None
         for line in input:
+            if line[0] == "\ufeff":
+                line = line[1:]
             line = normalize_space(line.rstrip())
             if not line:
                 continue
