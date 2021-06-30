@@ -289,7 +289,9 @@ class Reference:
     def extract_author(parts: List[str]) -> Iterator[Author]:
         while parts:
             part = parts.pop(0)
-            find_surname = regex.search(r"[[:upper:]][[:lower:]\'].*[[:lower:]]", part)
+            find_surname = regex.search(
+                r"[[:upper:]][[:lower:]\'\u2019].*[[:lower:]]", part
+            )
             if not find_surname:
                 initials = part
                 surname = parts.pop(0)
