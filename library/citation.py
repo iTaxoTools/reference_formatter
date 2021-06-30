@@ -96,11 +96,20 @@ def default_options() -> OptionsDict:
 
 
 class Author:
-    def __init__(self, surname: str, initials: str):
+    def __init__(self, surname: Optional[str] = None, initials: Optional[str] = None):
+        if surname is None or initials is None:
+            self.is_et_al = True
+            return
+        self.is_et_al = False
         self.surname = surname
         self.initials = initials.replace(" ", "")
 
     def format_author(self, options: OptionsDict, first: bool):
+        if self.is_et_al:
+            if options[Options.InitialsNoPeriod]:
+                return "et al"
+            else:
+                return "et al."
         if options[Options.InitialsNoPeriod]:
             initials = self.initials.replace(".", "")
         else:
@@ -291,6 +300,9 @@ class Reference:
     def extract_author(parts: List[str]) -> Iterator[Author]:
         while parts:
             part = parts.pop(0)
+            if regex.search("et al", part):
+                yield (Author())
+                continue
             find_surname = regex.search(
                 r"[[:upper:]][[:lower:]\'\u2019].*[[:lower:]]", part
             )
