@@ -251,7 +251,8 @@ class Reference:
             page_range = None
         if journal_matcher:
             article, journal, journal_issue = journal_matcher.extract_journal(article)
-            journal_issue = journal_issue or None
+            if not journal:
+                journal_issue = None
         else:
             journal = None
             journal_issue = None
