@@ -162,10 +162,22 @@ class Reference:
             for i, author in enumerate(self.authors)
         )
         *authors, last_author = formatted_authors
-        if not authors:
-            return last_author
+        if not options[Options.YearFormat].has_paren():
+            if options[Options.InitialsBefore] or options[Options.InitialsNoPeriod]:
+                end_sep = "."
+            else:
+                end_sep = ""
         else:
-            return ", ".join(authors) + str(options[Options.LastNameSep]) + last_author
+            end_sep = ""
+        if not authors:
+            return last_author + end_sep
+        else:
+            return (
+                ", ".join(authors)
+                + str(options[Options.LastNameSep])
+                + last_author
+                + end_sep
+            )
 
     def format_numbering(self, options: OptionsDict) -> str:
         if options[Options.KeepNumbering] and self.numbering:
