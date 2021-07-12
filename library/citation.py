@@ -133,6 +133,18 @@ def parse_doi(line: str) -> Tuple[str, Optional[str]]:
         return (line, None)
 
 
+class Journal:
+    def __init__(
+        self,
+        name: Dict[NameForm, str],
+        extra: Optional[str],
+        volume: Optional[Tuple[str, Optional[str]]],
+    ):
+        self.name = name
+        self.extra = extra
+        self.volume = volume
+
+
 class Reference:
     def __init__(
         self,
@@ -140,8 +152,8 @@ class Reference:
         authors: List[Author],
         year: int,
         article: str,
-        journal: Optional[Dict[NameForm, str]],
-        journal_issue: Optional[str],
+        journal: Optional[Journal],
+        extra: str,
         page_range: Optional[Tuple[str, str]],
         doi: Optional[str],
     ):
@@ -150,7 +162,7 @@ class Reference:
         self.year = year
         self.article = article
         self.journal = journal
-        self.journal_issue = journal_issue
+        self.extra = extra
         self.page_range = page_range
         self.doi = doi
 
@@ -193,12 +205,12 @@ class Reference:
 
     def format_journal(self, options: OptionsDict) -> str:
         if self.journal:
-            assert self.journal_issue is not None
-            sep = "" if regex.match(r"\p{Punct}", self.journal_issue) else " "
             return (
-                self.journal[options[Options.JournalNameForm]]
-                + sep
-                + self.journal_issue
+                self.journal.name[options[Options.JournalNameForm]]
+                + " "
+                + (self.journal.extra or "")
+                + " "
+                + str(self.journal.volume)
             )
         else:
             return ""
@@ -270,14 +282,28 @@ class Reference:
         else:
             page_range = None
         if journal_matcher:
-            article, journal, journal_issue = journal_matcher.extract_journal(article)
-            if not journal:
-                journal_issue = None
+            article, journal_name, extra = journal_matcher.extract_journal(article)
+            if journal_name:
+                extra = extra.strip()
+                volume_regex = regex.compile(
+                    r"(?<vol>\d+)[,:]|(?<vol>\d+)\s*\((?<issue>\d[^)])\)|vol\S+\s*(?<vol>d+)\s*iss\S+\s*(?<issue>\d+)"
+                )
+                volume_match = volume_regex.search(extra)
+                if not volume_match:
+                    journal = Journal(journal_name, None, None)
+                else:
+                    journal_extra = extra[: volume_match.start()].strip()
+                    journal_volume = (
+                        volume_match.group("vol"),
+                        volume_match.group("issue"),
+                    )
+                    extra = extra[volume_match.end() :].strip()
+                    journal = Journal(journal_name, journal_extra, journal_volume)
             else:
-                journal_issue = journal_issue.strip()
+                journal = None
         else:
             journal = None
-            journal_issue = None
+            extra = ""
         try:
             return Reference(
                 numbering,
@@ -285,7 +311,7 @@ class Reference:
                 year,
                 article.strip(),
                 journal,
-                journal_issue,
+                extra,
                 page_range,
                 doi,
             )
