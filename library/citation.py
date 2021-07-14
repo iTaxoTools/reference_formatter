@@ -227,7 +227,7 @@ class Reference:
     def __init__(
         self,
         numbering: Optional[str],
-        authors: List[Author],
+        authors: Union[List[Author], str],
         year: int,
         article: str,
         journal: Optional[Journal],
@@ -244,9 +244,11 @@ class Reference:
         self.page_range = page_range
         self.doi = doi
 
-    def format_authors(self, options: OptionsDict):
+    def format_authors(self, options: OptionsDict) -> str:
         if not self.authors:
             return ""
+        if isinstance(self.authors, str):
+            return self.authors
         formatted_authors = (
             author.format_author(options, i == 0)
             for i, author in enumerate(self.authors)
@@ -379,19 +381,20 @@ class Reference:
             journal = None
             extra = ""
         try:
-            return Reference(
-                numbering,
-                Reference.parse_authors(authors),
-                year,
-                article,
-                journal,
-                extra,
-                page_range,
-                doi,
-            )
+            authors_list = Reference.parse_authors(authors)
         except IndexError:  # parts.pop in extract_author
             print("Unexpected name:\n", authors)
-            return None
+            authors_list = authors
+        return Reference(
+            numbering,
+            authors_list,
+            year,
+            article,
+            journal,
+            extra,
+            page_range,
+            doi,
+        )
 
     @staticmethod
     def split_three_words(s: str) -> Optional[Tuple[str, str]]:
