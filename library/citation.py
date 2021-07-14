@@ -107,6 +107,7 @@ class PageSeparator(IntEnum):
 
 
 class Options(Enum):
+    ProcessJournalName = (bool, "Convert journal name")
     InitialsBefore = (bool, "Place initials before surname (except first name)")
     InitialsNoPeriod = (bool, "Write initials without abbreviating period")
     KeepNumbering = (bool, "Keep numbering of references")

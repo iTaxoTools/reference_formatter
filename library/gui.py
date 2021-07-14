@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from typing import Dict, Union
+from typing import Dict, Optional, Union
 import tkinter as tk
 import tkinter.ttk as ttk
 import tkinter.filedialog as tkfiledialog
@@ -51,7 +51,7 @@ class FmtParameters(ttk.LabelFrame):
 class FmtGui(ttk.Frame):
     def __init__(self, *args, **kwargs):
         self.preview_dir = kwargs.pop("preview_dir")
-        self.journal_matcher = JournalMatcher()
+        self.journal_matcher: Optional[JournalMatcher] = None
         super().__init__(*args, **kwargs)
         self.create_top_frame()
         self.parameters_frame = FmtParameters(self, text="Parameters")
@@ -113,6 +113,15 @@ class FmtGui(ttk.Frame):
     def run_command(self) -> None:
         self.clear_command()
         options = self.parameters_frame.get()
+        if options[Options.ProcessJournalName] and not self.journal_matcher:
+            msg = tk.Toplevel(self)
+            msg.attributes("-type", "splash")
+            msg.title("Please wait")
+            ttk.Label(msg, text="Loading journals' names").grid()
+            self.update()
+            self.journal_matcher = JournalMatcher()
+            msg.destroy()
+            self.update()
         try:
             with open(self.input_file.get(), errors="replace") as infile:
                 process_reference_file(
