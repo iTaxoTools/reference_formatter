@@ -314,7 +314,7 @@ class Reference:
             + self.format_page_range(options)
             + " "
             + self.format_doi(options)
-        )
+        ).strip()
 
     @staticmethod
     def parse(
