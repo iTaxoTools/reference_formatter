@@ -107,6 +107,8 @@ class PageSeparator(IntEnum):
 
 
 class Options(Enum):
+    ProcessAuthorsAndYear = (bool, "Convert authors and year of publication")
+    ProcessPageRangeVolume = (bool, "Convert page range and volume/issue number")
     ProcessJournalName = (bool, "Convert journal name")
     InitialsBefore = (bool, "Place initials before surname (except first name)")
     InitialsNoPeriod = (bool, "Write initials without abbreviating period")
@@ -130,6 +132,8 @@ class Options(Enum):
 
 
 options_on_by_default: Set[Options] = {
+    Options.ProcessAuthorsAndYear,
+    Options.ProcessPageRangeVolume,
     Options.ProcessJournalName,
 }
 
@@ -232,13 +236,18 @@ class Reference:
     def __init__(
         self,
         numbering: Optional[str],
-        authors: Union[List[Author], str],
+        authors: Optional[List[Author]],
         year: int,
         article: str,
         journal: Optional[Journal],
         extra: str,
         page_range: Optional[Tuple[str, str]],
         doi: Optional[str],
+        authors_string: str,
+        year_string: str,
+        page_range_string: str,
+        volume_issue_string: str,
+        journal_string: str,
     ):
         self.numbering = numbering
         self.authors = authors
@@ -248,6 +257,11 @@ class Reference:
         self.extra = extra
         self.page_range = page_range
         self.doi = doi
+        self.authors_string = authors_string
+        self.year_string = year_string
+        self.page_range_string = page_range_string
+        self.volume_issue_string = volume_issue_string
+        self.journal_string = journal_string
 
     def format_authors(self, options: OptionsDict) -> str:
         if not self.authors:
@@ -337,6 +351,7 @@ class Reference:
             else:
                 return None
             year = int(terminal_year_match.group(1))
+            year_string = terminal_year_match.group()
         else:
             year_match = regex.search(r"\(?(\d+)\)?\S?", s)
             if not year_match:
@@ -345,7 +360,9 @@ class Reference:
             authors = s[:year_start]
             article = s[year_end:]
             year = int(year_match.group(1))
+            year_string = year_match.group()
         authors = authors.strip()
+        authors_string = authors
         article = article.strip()
         page_range_regex = regex.compile(
             r"(?:pp\.)?\s*([A-Za-z]*\d+)\s?[-‐‑‒–—―]\s?([A-Za-z]*\d+)\S?$"
@@ -357,11 +374,16 @@ class Reference:
                 page_range_match.group(1).strip(),
                 page_range_match.group(2).strip(),
             )
+            page_range_string = page_range_match.group()
         else:
             page_range = None
+            page_range_string = ""
         if journal_matcher:
-            article, journal_name, extra = journal_matcher.extract_journal(article)
-            if journal_name:
+            article, journal_name_tuple, extra = journal_matcher.extract_journal(
+                article
+            )
+            if journal_name_tuple:
+                journal_name, journal_string = journal_name_tuple
                 extra = extra.strip()
                 volume_regex = regex.compile(
                     r"(?<vol>\d+)[,:]|(?<vol>\d+)\s*\((?<issue>\d[^)])\)|vol\S+\s*(?<vol>d+)\s*iss\S+\s*(?<issue>\d+)"
@@ -369,6 +391,7 @@ class Reference:
                 volume_match = volume_regex.search(extra)
                 if not volume_match:
                     journal = Journal(journal_name, None, None)
+                    volume_issue_string = ""
                 else:
                     journal_extra = extra[: volume_match.start()].strip()
                     journal_volume = (
@@ -377,19 +400,24 @@ class Reference:
                     )
                     extra = extra[volume_match.end() :].strip()
                     journal = Journal(journal_name, journal_extra, journal_volume)
+                    volume_issue_string = volume_match.group()
                 article = article.strip()
                 if regex.match(r"\p{Punct}", article[-1]):
                     article = article[:-1]
             else:
                 journal = None
+                journal_string = ""
+                volume_issue_string = ""
         else:
             journal = None
+            journal_string = ""
+            volume_issue_string = ""
             extra = ""
         try:
             authors_list = Reference.parse_authors(authors)
         except IndexError:  # parts.pop in extract_author
             print("Unexpected name:\n", authors)
-            authors_list = authors
+            authors_list = None
         return Reference(
             numbering,
             authors_list,
@@ -399,6 +427,11 @@ class Reference:
             extra,
             page_range,
             doi,
+            authors_string,
+            year_string,
+            page_range_string,
+            volume_issue_string,
+            journal_string,
         )
 
     @staticmethod
