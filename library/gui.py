@@ -8,7 +8,12 @@ import tkinter.messagebox as tkmessagebox
 from enum import IntEnum
 import os
 
-from library.citation import Options, OptionsDict, process_reference_file
+from library.citation import (
+    Options,
+    OptionsDict,
+    process_reference_file,
+    options_on_by_default,
+)
 from library.journal_list import JournalMatcher
 
 
@@ -19,7 +24,7 @@ class FmtParameters(ttk.LabelFrame):
         row = 0
         for option in list(Options):
             if option.type is bool:
-                var = tk.BooleanVar(self, value=False)
+                var = tk.BooleanVar(self, value=option in options_on_by_default)
                 self.get_options[option] = var
                 ttk.Checkbutton(self, text=option.description, variable=var).grid(
                     row=row, column=0, sticky="w", columnspan=2

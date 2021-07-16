@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from enum import IntEnum, Enum
-from typing import Dict, List, Optional, Iterator, Any, TextIO, Tuple, Union
+from typing import Dict, List, Optional, Iterator, Any, TextIO, Tuple, Union, Set
 import os
 
 import regex
@@ -129,6 +129,10 @@ class Options(Enum):
         self.description = description
 
 
+options_on_by_default: Set[Options] = {
+    Options.ProcessJournalName,
+}
+
 OptionsDict = Dict[Options, Any]
 
 
@@ -136,7 +140,7 @@ def default_options() -> OptionsDict:
     result: OptionsDict = {}
     for option in list(Options):
         if option.type is bool:
-            result[option] = False
+            result[option] = option in options_on_by_default
         elif issubclass(option.type, IntEnum):
             result[option] = option.type(0)
         else:
