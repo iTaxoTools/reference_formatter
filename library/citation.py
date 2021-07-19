@@ -302,6 +302,8 @@ class Reference:
             return self.journal_string
 
     def format_volume(self, options: OptionsDict) -> str:
+        if not options[Options.ProcessPageRangeVolume]:
+            return self.volume_issue_string
         if not self.volume:
             return ""
         volume, issue = self.volume
