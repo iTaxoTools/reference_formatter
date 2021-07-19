@@ -195,11 +195,9 @@ class Journal:
         self,
         name: Dict[NameForm, str],
         extra: Optional[str],
-        volume: Optional[Tuple[str, Optional[str]]],
     ):
         self.name = name
         self.extra = extra
-        self.volume = volume
 
     def format(self, options: OptionsDict) -> str:
         formatted_name = (
@@ -213,23 +211,7 @@ class Journal:
             and formatted_name[-1] == "."
         ):
             formatted_name = formatted_name[:-1]
-        return (
-            formatted_name
-            + options[Options.VolumeSeparator].format()
-            + " "
-            + self.format_volume(options)
-        )
-
-    def format_volume(self, options: OptionsDict) -> str:
-        if not self.volume:
-            return ""
-        volume, issue = self.volume
-        formatted_issue = f" ({issue})" if issue else ""
-        return (
-            volume
-            + (formatted_issue if options[Options.RemoveIssue] else "")
-            + options[Options.VolumeFormatting].format()
-        )
+        return formatted_name + options[Options.VolumeSeparator].format()
 
 
 class Reference:
@@ -240,6 +222,7 @@ class Reference:
         year: int,
         article: str,
         journal: Optional[Journal],
+        volume: Optional[Tuple[str, Optional[str]]],
         extra: str,
         page_range: Optional[Tuple[str, str]],
         doi: Optional[str],
@@ -254,6 +237,7 @@ class Reference:
         self.year = year
         self.article = article
         self.journal = journal
+        self.volume = volume
         self.extra = extra
         self.page_range = page_range
         self.doi = doi
@@ -317,6 +301,17 @@ class Reference:
         else:
             return self.journal_string
 
+    def format_volume(self, options: OptionsDict) -> str:
+        if not self.volume:
+            return ""
+        volume, issue = self.volume
+        formatted_issue = f" ({issue})" if issue else ""
+        return (
+            volume
+            + (formatted_issue if options[Options.RemoveIssue] else "")
+            + options[Options.VolumeFormatting].format()
+        )
+
     def format_page_range(self, options: OptionsDict) -> str:
         if options[Options.ProcessPageRangeVolume]:
             if self.page_range:
@@ -336,6 +331,8 @@ class Reference:
             + " "
             + self.article
             + self.format_journal(options)
+            + " "
+            + self.format_volume(options)
             + " "
             + self.format_page_range(options)
             + " "
@@ -402,7 +399,8 @@ class Reference:
                 )
                 volume_match = volume_regex.search(extra)
                 if not volume_match:
-                    journal = Journal(journal_name, None, None)
+                    journal = Journal(journal_name, None)
+                    volume = None
                     volume_issue_string = ""
                 else:
                     journal_extra = extra[: volume_match.start()].strip()
@@ -411,17 +409,20 @@ class Reference:
                         volume_match.group("issue"),
                     )
                     extra = extra[volume_match.end() :].strip()
-                    journal = Journal(journal_name, journal_extra, journal_volume)
+                    journal = Journal(journal_name, journal_extra)
+                    volume = journal_volume
                     volume_issue_string = volume_match.group()
                 article = article.strip()
                 if regex.match(r"\p{Punct}", article[-1]):
                     article = article[:-1]
             else:
                 journal = None
+                volume = None
                 journal_string = ""
                 volume_issue_string = ""
         else:
             journal = None
+            volume = None
             journal_string = ""
             volume_issue_string = ""
             extra = ""
@@ -436,6 +437,7 @@ class Reference:
             year,
             article,
             journal,
+            volume,
             extra,
             page_range,
             doi,
