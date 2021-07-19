@@ -212,7 +212,7 @@ class Journal:
             options[Options.VolumeSeparator] == VolumeSeparator.Period
             and formatted_name[-1] == "."
         ):
-            formatted_name = formatted_name[-1]
+            formatted_name = formatted_name[:-1]
         return (
             formatted_name
             + options[Options.VolumeSeparator].format()
