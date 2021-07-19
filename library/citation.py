@@ -302,6 +302,9 @@ class Reference:
         else:
             return self.doi or ""
 
+    def format_year(self, options: OptionsDict) -> str:
+        return options[Options.YearFormat].format_year(self.year)
+
     def format_journal(self, options: OptionsDict) -> str:
         if self.journal:
             return self.journal.format(options)
@@ -320,7 +323,7 @@ class Reference:
             + " "
             + self.format_authors(options)
             + " "
-            + options[Options.YearFormat].format_year(self.year)
+            + self.format_year(options)
             + " "
             + self.article
             + self.format_journal(options)
