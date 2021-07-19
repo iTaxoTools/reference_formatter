@@ -264,10 +264,10 @@ class Reference:
         self.journal_string = journal_string
 
     def format_authors(self, options: OptionsDict) -> str:
+        if not options[Options.ProcessAuthorsAndYear]:
+            return self.authors_string
         if not self.authors:
             return ""
-        if isinstance(self.authors, str):
-            return self.authors
         formatted_authors = (
             author.format_author(options, i == 0)
             for i, author in enumerate(self.authors)
@@ -303,19 +303,28 @@ class Reference:
             return self.doi or ""
 
     def format_year(self, options: OptionsDict) -> str:
-        return options[Options.YearFormat].format_year(self.year)
+        if options[Options.ProcessAuthorsAndYear]:
+            return options[Options.YearFormat].format_year(self.year)
+        else:
+            return self.year_string
 
     def format_journal(self, options: OptionsDict) -> str:
-        if self.journal:
-            return self.journal.format(options)
+        if options[Options.ProcessJournalName]:
+            if self.journal:
+                return self.journal.format(options)
+            else:
+                return ""
         else:
-            return ""
+            return self.journal_string
 
     def format_page_range(self, options: OptionsDict) -> str:
-        if self.page_range:
-            return options[Options.PageRangeSeparator].format_range(self.page_range)
+        if options[Options.ProcessPageRangeVolume]:
+            if self.page_range:
+                return options[Options.PageRangeSeparator].format_range(self.page_range)
+            else:
+                return ""
         else:
-            return ""
+            return self.page_range_string
 
     def format_reference(self, options: OptionsDict):
         return (
