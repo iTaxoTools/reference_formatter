@@ -267,7 +267,7 @@ class Reference:
         if not options[Options.ProcessAuthorsAndYear]:
             return self.authors_string
         if not self.authors:
-            return ""
+            return self.authors_string
         formatted_authors = (
             author.format_author(options, i == 0)
             for i, author in enumerate(self.authors)
