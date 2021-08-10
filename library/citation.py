@@ -349,7 +349,7 @@ class Reference:
         numbering_match = regex.match(r"\d+\.?\s", s)
         if numbering_match:
             numbering = numbering_match.group(0).strip()
-            s = s[numbering_match.end() :].strip()
+            s = s[numbering_match.end():].strip()
         else:
             numbering = None
         terminal_year_match = regex.search(r"\((\d+)\)\S?$", s)
@@ -410,12 +410,12 @@ class Reference:
                         volume_match.group("vol"),
                         volume_match.group("issue"),
                     )
-                    extra = extra[volume_match.end() :].strip()
+                    extra = extra[volume_match.end():].strip()
                     journal = Journal(journal_name, journal_extra)
                     volume = journal_volume
                     volume_issue_string = volume_match.group()
                 article = article.strip()
-                if regex.match(r"\p{Punct}", article[-1]):
+                if article and regex.match(r"\p{Punct}", article[-1]):
                     article = article[:-1]
             else:
                 journal = None
@@ -457,7 +457,7 @@ class Reference:
         )
         three_words_match = three_words_regex.search(s)
         if three_words_regex:
-            return s[: three_words_match.start()], s[three_words_match.start() :]
+            return s[: three_words_match.start()], s[three_words_match.start():]
         else:
             return None
 
@@ -494,7 +494,7 @@ class Reference:
                 initials = parts.pop(0)
             elif find_surname.start() == 0:
                 surname = find_surname.group()
-                initials = part[find_surname.end() + 1 :]
+                initials = part[find_surname.end() + 1:]
             else:
                 surname = find_surname.group()
                 initials = part[: find_surname.start() - 1]
