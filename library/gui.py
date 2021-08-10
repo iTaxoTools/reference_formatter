@@ -120,7 +120,8 @@ class FmtGui(ttk.Frame):
         options = self.parameters_frame.get()
         if options[Options.ProcessJournalName] and not self.journal_matcher:
             msg = tk.Toplevel(self)
-            msg.attributes("-type", "splash")
+            if self.tk.call('tk', 'windowingsystem') == 'x11':
+                msg.attributes("-type", "splash")
             msg.title("Please wait")
             ttk.Label(msg, text="Loading journals' names").grid()
             self.update()
