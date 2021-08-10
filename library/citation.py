@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from enum import IntEnum, Enum
-from typing import Dict, List, Optional, Iterator, Any, TextIO, Tuple, Union
+from typing import Dict, List, Optional, Iterator, Any, TextIO, Tuple, Union, Set
 import os
 
 import regex
@@ -107,6 +107,9 @@ class PageSeparator(IntEnum):
 
 
 class Options(Enum):
+    ProcessAuthorsAndYear = (bool, "Convert authors and year of publication")
+    ProcessPageRangeVolume = (bool, "Convert page range and volume/issue number")
+    ProcessJournalName = (bool, "Convert journal name")
     InitialsBefore = (bool, "Place initials before surname (except first name)")
     InitialsNoPeriod = (bool, "Write initials without abbreviating period")
     KeepNumbering = (bool, "Keep numbering of references")
@@ -128,6 +131,12 @@ class Options(Enum):
         self.description = description
 
 
+options_on_by_default: Set[Options] = {
+    Options.ProcessAuthorsAndYear,
+    Options.ProcessPageRangeVolume,
+    Options.ProcessJournalName,
+}
+
 OptionsDict = Dict[Options, Any]
 
 
@@ -135,7 +144,7 @@ def default_options() -> OptionsDict:
     result: OptionsDict = {}
     for option in list(Options):
         if option.type is bool:
-            result[option] = False
+            result[option] = option in options_on_by_default
         elif issubclass(option.type, IntEnum):
             result[option] = option.type(0)
         else:
@@ -186,11 +195,9 @@ class Journal:
         self,
         name: Dict[NameForm, str],
         extra: Optional[str],
-        volume: Optional[Tuple[str, Optional[str]]],
     ):
         self.name = name
         self.extra = extra
-        self.volume = volume
 
     def format(self, options: OptionsDict) -> str:
         formatted_name = (
@@ -203,50 +210,48 @@ class Journal:
             options[Options.VolumeSeparator] == VolumeSeparator.Period
             and formatted_name[-1] == "."
         ):
-            formatted_name = formatted_name[-1]
-        return (
-            formatted_name
-            + options[Options.VolumeSeparator].format()
-            + " "
-            + self.format_volume(options)
-        )
-
-    def format_volume(self, options: OptionsDict) -> str:
-        if not self.volume:
-            return ""
-        volume, issue = self.volume
-        formatted_issue = f" ({issue})" if issue else ""
-        return (
-            volume
-            + (formatted_issue if options[Options.RemoveIssue] else "")
-            + options[Options.VolumeFormatting].format()
-        )
+            formatted_name = formatted_name[:-1]
+        return formatted_name + options[Options.VolumeSeparator].format()
 
 
 class Reference:
     def __init__(
         self,
         numbering: Optional[str],
-        authors: List[Author],
+        authors: Optional[List[Author]],
         year: int,
         article: str,
         journal: Optional[Journal],
+        volume: Optional[Tuple[str, Optional[str]]],
         extra: str,
         page_range: Optional[Tuple[str, str]],
         doi: Optional[str],
+        authors_string: str,
+        year_string: str,
+        page_range_string: str,
+        volume_issue_string: str,
+        journal_string: str,
     ):
         self.numbering = numbering
         self.authors = authors
         self.year = year
         self.article = article
         self.journal = journal
+        self.volume = volume
         self.extra = extra
         self.page_range = page_range
         self.doi = doi
+        self.authors_string = authors_string
+        self.year_string = year_string
+        self.page_range_string = page_range_string
+        self.volume_issue_string = volume_issue_string
+        self.journal_string = journal_string
 
-    def format_authors(self, options: OptionsDict):
+    def format_authors(self, options: OptionsDict) -> str:
+        if not options[Options.ProcessAuthorsAndYear]:
+            return self.authors_string
         if not self.authors:
-            return ""
+            return self.authors_string
         formatted_authors = (
             author.format_author(options, i == 0)
             for i, author in enumerate(self.authors)
@@ -281,17 +286,42 @@ class Reference:
         else:
             return self.doi or ""
 
-    def format_journal(self, options: OptionsDict) -> str:
-        if self.journal:
-            return self.journal.format(options)
+    def format_year(self, options: OptionsDict) -> str:
+        if options[Options.ProcessAuthorsAndYear]:
+            return options[Options.YearFormat].format_year(self.year)
         else:
+            return self.year_string
+
+    def format_journal(self, options: OptionsDict) -> str:
+        if options[Options.ProcessJournalName]:
+            if self.journal:
+                return self.journal.format(options)
+            else:
+                return ""
+        else:
+            return self.journal_string
+
+    def format_volume(self, options: OptionsDict) -> str:
+        if not options[Options.ProcessPageRangeVolume]:
+            return self.volume_issue_string
+        if not self.volume:
             return ""
+        volume, issue = self.volume
+        formatted_issue = f" ({issue})" if issue else ""
+        return (
+            volume
+            + (formatted_issue if options[Options.RemoveIssue] else "")
+            + options[Options.VolumeFormatting].format()
+        )
 
     def format_page_range(self, options: OptionsDict) -> str:
-        if self.page_range:
-            return options[Options.PageRangeSeparator].format_range(self.page_range)
+        if options[Options.ProcessPageRangeVolume]:
+            if self.page_range:
+                return options[Options.PageRangeSeparator].format_range(self.page_range)
+            else:
+                return ""
         else:
-            return ""
+            return self.page_range_string
 
     def format_reference(self, options: OptionsDict):
         return (
@@ -299,15 +329,17 @@ class Reference:
             + " "
             + self.format_authors(options)
             + " "
-            + options[Options.YearFormat].format_year(self.year)
+            + self.format_year(options)
             + " "
             + self.article
             + self.format_journal(options)
             + " "
+            + self.format_volume(options)
+            + " "
             + self.format_page_range(options)
             + " "
             + self.format_doi(options)
-        )
+        ).strip()
 
     @staticmethod
     def parse(
@@ -330,6 +362,7 @@ class Reference:
             else:
                 return None
             year = int(terminal_year_match.group(1))
+            year_string = terminal_year_match.group()
         else:
             year_match = regex.search(r"\(?(\d+)\)?\S?", s)
             if not year_match:
@@ -338,7 +371,9 @@ class Reference:
             authors = s[:year_start]
             article = s[year_end:]
             year = int(year_match.group(1))
+            year_string = year_match.group()
         authors = authors.strip()
+        authors_string = authors
         article = article.strip()
         page_range_regex = regex.compile(
             r"(?:pp\.)?\s*([A-Za-z]*\d+)\s?[-‐‑‒–—―]\s?([A-Za-z]*\d+)\S?$"
@@ -350,18 +385,25 @@ class Reference:
                 page_range_match.group(1).strip(),
                 page_range_match.group(2).strip(),
             )
+            page_range_string = page_range_match.group()
         else:
             page_range = None
+            page_range_string = ""
         if journal_matcher:
-            article, journal_name, extra = journal_matcher.extract_journal(article)
-            if journal_name:
+            article, journal_name_tuple, extra = journal_matcher.extract_journal(
+                article
+            )
+            if journal_name_tuple:
+                journal_name, journal_string = journal_name_tuple
                 extra = extra.strip()
                 volume_regex = regex.compile(
                     r"(?<vol>\d+)[,:]|(?<vol>\d+)\s*\((?<issue>\d[^)])\)|vol\S+\s*(?<vol>d+)\s*iss\S+\s*(?<issue>\d+)"
                 )
                 volume_match = volume_regex.search(extra)
                 if not volume_match:
-                    journal = Journal(journal_name, None, None)
+                    journal = Journal(journal_name, None)
+                    volume = None
+                    volume_issue_string = ""
                 else:
                     journal_extra = extra[: volume_match.start()].strip()
                     journal_volume = (
@@ -369,29 +411,44 @@ class Reference:
                         volume_match.group("issue"),
                     )
                     extra = extra[volume_match.end() :].strip()
-                    journal = Journal(journal_name, journal_extra, journal_volume)
+                    journal = Journal(journal_name, journal_extra)
+                    volume = journal_volume
+                    volume_issue_string = volume_match.group()
                 article = article.strip()
                 if regex.match(r"\p{Punct}", article[-1]):
                     article = article[:-1]
             else:
                 journal = None
+                volume = None
+                journal_string = ""
+                volume_issue_string = ""
         else:
             journal = None
+            volume = None
+            journal_string = ""
+            volume_issue_string = ""
             extra = ""
         try:
-            return Reference(
-                numbering,
-                Reference.parse_authors(authors),
-                year,
-                article,
-                journal,
-                extra,
-                page_range,
-                doi,
-            )
+            authors_list = Reference.parse_authors(authors)
         except IndexError:  # parts.pop in extract_author
             print("Unexpected name:\n", authors)
-            return None
+            authors_list = None
+        return Reference(
+            numbering,
+            authors_list,
+            year,
+            article,
+            journal,
+            volume,
+            extra,
+            page_range,
+            doi,
+            authors_string,
+            year_string,
+            page_range_string,
+            volume_issue_string,
+            journal_string,
+        )
 
     @staticmethod
     def split_three_words(s: str) -> Optional[Tuple[str, str]]:

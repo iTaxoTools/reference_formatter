@@ -35,7 +35,9 @@ class JournalMatcher:
     def __init__(self) -> None:
         self.table, self.matcher = make_matcher(fill_missing(load()))
 
-    def extract_journal(self, s: str) -> Tuple[str, Optional[Dict[NameForm, str]], str]:
+    def extract_journal(
+        self, s: str
+    ) -> Tuple[str, Optional[Tuple[Dict[NameForm, str], str]], str]:
         matches = self.matcher.find_matches_as_indexes(s)
         if not matches:
             return (s, None, "")
@@ -43,7 +45,7 @@ class JournalMatcher:
         journal_names = dict(self.table.iloc[match_num // N_NAME_FORMS])
         journal_name = journal_names[NameForm(match_num % N_NAME_FORMS)]
         prefix, _, suffix = s.partition(journal_name)
-        return prefix, journal_names, suffix
+        return prefix, (journal_names, journal_name), suffix
 
 
 def load() -> pd.DataFrame:
