@@ -44,6 +44,47 @@ class YearFormat(IntEnum):
         return self.format_year(1998)
 
 
+class JournalSeparator(IntEnum):
+    Period = 0
+    Comma = 1
+    PeriodMinus = 2
+    PeriodNDash = 3
+    CommaMinus = 4
+    CommaNDash = 5
+
+    def __str__(self) -> str:
+        return [".", ",", ".-", ".–", ",-", ",–"][self]
+
+    def format(self) -> str:
+        return str(self)
+
+
+class VolumeSeparator(IntEnum):
+    Space = 0
+    Period = 1
+    Comma = 2
+    Semicolon = 3
+
+    def __str__(self) -> str:
+        return ["", ".", ",", ";"][self]
+
+    def format(self) -> str:
+        return str(self)
+
+
+class VolumeFormatting(IntEnum):
+    Colon = 0
+    Comma = 1
+    Period = 2
+    Semicolon = 3
+
+    def __str__(self) -> str:
+        return [":", ",", ".", ";"][self]
+
+    def format(self) -> str:
+        return str(self)
+
+
 class PageSeparator(IntEnum):
     Minus = 0
     Hyphen = 1
@@ -72,7 +113,14 @@ class Options(Enum):
     RemoveDoi = (bool, "Remove doi")
     LastNameSep = (LastSeparator, "Precede last name with:")
     YearFormat = (YearFormat, "Format year as:")
+    JournalSeparator = (JournalSeparator, "Separate Journal name with:")
     JournalNameForm = (NameForm, "Represent journal name as:")
+    VolumeSeparator = (VolumeSeparator, "Separate volume number with:")
+    RemoveIssue = (bool, "Remove issue number")
+    VolumeFormatting = (
+        VolumeFormatting,
+        "Format volume number (and issue number) with:",
+    )
     PageRangeSeparator = (PageSeparator, "Use as page range separator")
 
     def __init__(self, type: type, description: str):
@@ -133,6 +181,48 @@ def parse_doi(line: str) -> Tuple[str, Optional[str]]:
         return (line, None)
 
 
+class Journal:
+    def __init__(
+        self,
+        name: Dict[NameForm, str],
+        extra: Optional[str],
+        volume: Optional[Tuple[str, Optional[str]]],
+    ):
+        self.name = name
+        self.extra = extra
+        self.volume = volume
+
+    def format(self, options: OptionsDict) -> str:
+        formatted_name = (
+            options[Options.JournalSeparator].format()
+            + " "
+            + self.name[options[Options.JournalNameForm]]
+            + (self.extra or "")
+        )
+        if (
+            options[Options.VolumeSeparator] == VolumeSeparator.Period
+            and formatted_name[-1] == "."
+        ):
+            formatted_name = formatted_name[-1]
+        return (
+            formatted_name
+            + options[Options.VolumeSeparator].format()
+            + " "
+            + self.format_volume(options)
+        )
+
+    def format_volume(self, options: OptionsDict) -> str:
+        if not self.volume:
+            return ""
+        volume, issue = self.volume
+        formatted_issue = f" ({issue})" if issue else ""
+        return (
+            volume
+            + (formatted_issue if options[Options.RemoveIssue] else "")
+            + options[Options.VolumeFormatting].format()
+        )
+
+
 class Reference:
     def __init__(
         self,
@@ -140,8 +230,8 @@ class Reference:
         authors: List[Author],
         year: int,
         article: str,
-        journal: Optional[Dict[NameForm, str]],
-        journal_issue: Optional[str],
+        journal: Optional[Journal],
+        extra: str,
         page_range: Optional[Tuple[str, str]],
         doi: Optional[str],
     ):
@@ -150,7 +240,7 @@ class Reference:
         self.year = year
         self.article = article
         self.journal = journal
-        self.journal_issue = journal_issue
+        self.extra = extra
         self.page_range = page_range
         self.doi = doi
 
@@ -193,13 +283,7 @@ class Reference:
 
     def format_journal(self, options: OptionsDict) -> str:
         if self.journal:
-            assert self.journal_issue is not None
-            sep = "" if regex.match(r"\p{Punct}", self.journal_issue) else " "
-            return (
-                self.journal[options[Options.JournalNameForm]]
-                + sep
-                + self.journal_issue
-            )
+            return self.journal.format(options)
         else:
             return ""
 
@@ -218,7 +302,6 @@ class Reference:
             + options[Options.YearFormat].format_year(self.year)
             + " "
             + self.article
-            + " "
             + self.format_journal(options)
             + " "
             + self.format_page_range(options)
@@ -270,22 +353,39 @@ class Reference:
         else:
             page_range = None
         if journal_matcher:
-            article, journal, journal_issue = journal_matcher.extract_journal(article)
-            if not journal:
-                journal_issue = None
+            article, journal_name, extra = journal_matcher.extract_journal(article)
+            if journal_name:
+                extra = extra.strip()
+                volume_regex = regex.compile(
+                    r"(?<vol>\d+)[,:]|(?<vol>\d+)\s*\((?<issue>\d[^)])\)|vol\S+\s*(?<vol>d+)\s*iss\S+\s*(?<issue>\d+)"
+                )
+                volume_match = volume_regex.search(extra)
+                if not volume_match:
+                    journal = Journal(journal_name, None, None)
+                else:
+                    journal_extra = extra[: volume_match.start()].strip()
+                    journal_volume = (
+                        volume_match.group("vol"),
+                        volume_match.group("issue"),
+                    )
+                    extra = extra[volume_match.end() :].strip()
+                    journal = Journal(journal_name, journal_extra, journal_volume)
+                article = article.strip()
+                if regex.match(r"\p{Punct}", article[-1]):
+                    article = article[:-1]
             else:
-                journal_issue = journal_issue.strip()
+                journal = None
         else:
             journal = None
-            journal_issue = None
+            extra = ""
         try:
             return Reference(
                 numbering,
                 Reference.parse_authors(authors),
                 year,
-                article.strip(),
+                article,
                 journal,
-                journal_issue,
+                extra,
                 page_range,
                 doi,
             )
