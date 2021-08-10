@@ -162,10 +162,22 @@ class Reference:
             for i, author in enumerate(self.authors)
         )
         *authors, last_author = formatted_authors
-        if not authors:
-            return last_author
+        if not options[Options.YearFormat].has_paren():
+            if options[Options.InitialsBefore] or options[Options.InitialsNoPeriod]:
+                end_sep = "."
+            else:
+                end_sep = ""
         else:
-            return ", ".join(authors) + str(options[Options.LastNameSep]) + last_author
+            end_sep = ""
+        if not authors:
+            return last_author + end_sep
+        else:
+            return (
+                ", ".join(authors)
+                + str(options[Options.LastNameSep])
+                + last_author
+                + end_sep
+            )
 
     def format_numbering(self, options: OptionsDict) -> str:
         if options[Options.KeepNumbering] and self.numbering:
@@ -182,7 +194,12 @@ class Reference:
     def format_journal(self, options: OptionsDict) -> str:
         if self.journal:
             assert self.journal_issue is not None
-            return self.journal[options[Options.JournalNameForm]] + self.journal_issue
+            sep = "" if regex.match(r"\p{Punct}", self.journal_issue) else " "
+            return (
+                self.journal[options[Options.JournalNameForm]]
+                + sep
+                + self.journal_issue
+            )
         else:
             return ""
 
@@ -195,6 +212,7 @@ class Reference:
     def format_reference(self, options: OptionsDict):
         return (
             self.format_numbering(options)
+            + " "
             + self.format_authors(options)
             + " "
             + options[Options.YearFormat].format_year(self.year)
@@ -215,8 +233,8 @@ class Reference:
         s, doi = parse_doi(s)
         numbering_match = regex.match(r"\d+\.?\s", s)
         if numbering_match:
-            numbering = numbering_match.group(0)
-            s = s[numbering_match.end() :]
+            numbering = numbering_match.group(0).strip()
+            s = s[numbering_match.end() :].strip()
         else:
             numbering = None
         terminal_year_match = regex.search(r"\((\d+)\)\S?$", s)
@@ -237,30 +255,35 @@ class Reference:
             authors = s[:year_start]
             article = s[year_end:]
             year = int(year_match.group(1))
+        authors = authors.strip()
+        article = article.strip()
         page_range_regex = regex.compile(
-            r"(?:pp\.)?\s*([A-Za-z]*\d+)\s?[-‐‑‒–—―]\s?([A-Za-z]*\d+)\S?\s*$"
+            r"(?:pp\.)?\s*([A-Za-z]*\d+)\s?[-‐‑‒–—―]\s?([A-Za-z]*\d+)\S?$"
         )
         page_range_match = page_range_regex.search(article)
         if page_range_match:
-            article = article[: page_range_match.start()]
+            article = article[: page_range_match.start()].strip()
             page_range = (
-                page_range_match.group(1),
-                page_range_match.group(2),
+                page_range_match.group(1).strip(),
+                page_range_match.group(2).strip(),
             )
         else:
             page_range = None
         if journal_matcher:
             article, journal, journal_issue = journal_matcher.extract_journal(article)
-            journal_issue = journal_issue or None
+            if not journal:
+                journal_issue = None
+            else:
+                journal_issue = journal_issue.strip()
         else:
             journal = None
             journal_issue = None
         try:
             return Reference(
                 numbering,
-                Reference.parse_authors(authors.strip()),
+                Reference.parse_authors(authors),
                 year,
-                article,
+                article.strip(),
                 journal,
                 journal_issue,
                 page_range,
