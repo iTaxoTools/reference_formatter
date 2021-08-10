@@ -96,11 +96,20 @@ def default_options() -> OptionsDict:
 
 
 class Author:
-    def __init__(self, surname: str, initials: str):
+    def __init__(self, surname: Optional[str] = None, initials: Optional[str] = None):
+        if surname is None or initials is None:
+            self.is_et_al = True
+            return
+        self.is_et_al = False
         self.surname = surname
         self.initials = initials.replace(" ", "")
 
     def format_author(self, options: OptionsDict, first: bool):
+        if self.is_et_al:
+            if options[Options.InitialsNoPeriod]:
+                return "et al"
+            else:
+                return "et al."
         if options[Options.InitialsNoPeriod]:
             initials = self.initials.replace(".", "")
         else:
@@ -222,9 +231,9 @@ class Reference:
             year = int(terminal_year_match.group(1))
         else:
             year_match = regex.search(r"\(?(\d+)\)?\S?", s)
-            year_start, year_end = year_match.span()
             if not year_match:
                 return None
+            year_start, year_end = year_match.span()
             authors = s[:year_start]
             article = s[year_end:]
             year = int(year_match.group(1))
@@ -249,7 +258,7 @@ class Reference:
         try:
             return Reference(
                 numbering,
-                Reference.parse_authors(authors),
+                Reference.parse_authors(authors.strip()),
                 year,
                 article,
                 journal,
@@ -258,6 +267,7 @@ class Reference:
                 doi,
             )
         except IndexError:  # parts.pop in extract_author
+            print("Unexpected name:\n", authors)
             return None
 
     @staticmethod
@@ -280,7 +290,9 @@ class Reference:
             if sep:
                 break
         parts = [
-            part for part in parts_rest.split(", ") + last_part.split(", ") if part
+            part.strip()
+            for part in parts_rest.split(",") + last_part.split(",")
+            if part
         ]
         return [author for author in Reference.extract_author(parts)]
 
@@ -288,7 +300,12 @@ class Reference:
     def extract_author(parts: List[str]) -> Iterator[Author]:
         while parts:
             part = parts.pop(0)
-            find_surname = regex.search(r"[[:upper:]][[:lower:]\'].*[[:lower:]]", part)
+            if regex.search("et al", part):
+                yield (Author())
+                continue
+            find_surname = regex.search(
+                r"\p{Alpha}[\p{Lower}\'\u2019].*\p{Lower}", part
+            )
             if not find_surname:
                 initials = part
                 surname = parts.pop(0)
@@ -323,6 +340,8 @@ def process_reference_file(
     with open(os.path.join(output_dir, "output"), mode="w") as outfile:
         prev_reference = None
         for line in input:
+            if line[0] == "\ufeff":
+                line = line[1:]
             line = normalize_space(line.rstrip())
             if not line:
                 continue
@@ -338,3 +357,5 @@ def process_reference_file(
             else:
                 print("*", line, sep="", file=outfile)
                 continue
+        if prev_reference:
+            print(prev_reference.format_reference(options), file=outfile)
