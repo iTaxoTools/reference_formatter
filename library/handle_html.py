@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 
+import html
+from typing import Tuple, Optional, NamedTuple, Iterator, List
+
 import regex
-from typing import Tuple, Optional, NamedTuple, Iterator
 
 from library.utils import normalize_space
 
@@ -141,3 +143,37 @@ class HTMLList():
             entry_content = p_description + self._input
             self._input = ""
         return ListEntry.construct(entry_content)
+
+
+class ExtractedTags:
+
+    def __init__(self, parts: List[str], tags: List[str]):
+        self._tags: List[Tuple[int, str]] = list(zip(map(len, parts), tags))
+
+    def insert_tags(self, s: str, offset: int) -> str:
+        total_offset = - offset
+        parts: List[str] = []
+        for tag_offset, tag in self._tags:
+            if total_offset + tag_offset < 0:
+                total_offset += tag_offset
+                continue
+            if total_offset + tag_offset > len(s):
+                break
+            part_start = total_offset if total_offset >= 0 else 0
+            parts.append(html.escape(s[part_start:total_offset + tag_offset]))
+            parts.append(tag)
+            total_offset += tag_offset
+        parts.append(s[total_offset:])
+        return "".join(parts)
+
+
+def extract_tags(s: str) -> Tuple[str, ExtractedTags]:
+    """
+    Returns HTML-unescaped string without tags
+    and an object containing extracted tags with their positions
+    """
+    tag_regex = regex.compile(r'<[^>]*>')
+    tags: List[str] = list(map(lambda m: m.group(), regex.finditer(tag_regex, s)))
+    parts: List[str] = list(map(html.unescape, regex.splititer(tag_regex, s)))
+    assert parts
+    return ("".join(parts), ExtractedTags(parts, tags))
