@@ -125,6 +125,7 @@ class Options(Enum):
         "Format volume number (and issue number) with:",
     )
     PageRangeSeparator = (PageSeparator, "Use as page range separator")
+    HtmlFormat = (bool, "HTML format")
 
     def __init__(self, type: type, description: str):
         self.type = type
@@ -231,6 +232,7 @@ class Reference:
         page_range_string: str,
         volume_issue_string: str,
         journal_string: str,
+        article_position: int,
     ):
         self.numbering = numbering
         self.authors = authors
@@ -346,10 +348,12 @@ class Reference:
         s: str, journal_matcher: Optional[JournalMatcher]
     ) -> Optional["Reference"]:
         s, doi = parse_doi(s)
+        article_position = 0
         numbering_match = regex.match(r"\d+\.?\s", s)
         if numbering_match:
             numbering = numbering_match.group(0).strip()
             s = s[numbering_match.end():].strip()
+            article_position += numbering_match.end()
         else:
             numbering = None
         terminal_year_match = regex.search(r"\((\d+)\)\S?$", s)
@@ -358,7 +362,8 @@ class Reference:
                 s[: terminal_year_match.start()]
             )
             if authors_article:
-                authors, article = authors_article
+                authors, article, position = authors_article
+                article_position += position
             else:
                 return None
             year = int(terminal_year_match.group(1))
@@ -370,17 +375,20 @@ class Reference:
             year_start, year_end = year_match.span()
             authors = s[:year_start]
             article = s[year_end:]
+            article_position += year_end
             year = int(year_match.group(1))
             year_string = year_match.group()
         authors = authors.strip()
         authors_string = authors
+        whitespace_length = regex.match(r'\s*', article).start()
         article = article.strip()
+        article_position += whitespace_length
         page_range_regex = regex.compile(
             r"(?:pp\.)?\s*([A-Za-z]*\d+)\s?[-‐‑‒–—―]\s?([A-Za-z]*\d+)\S?$"
         )
         page_range_match = page_range_regex.search(article)
         if page_range_match:
-            article = article[: page_range_match.start()].strip()
+            article = article[: page_range_match.start()].rstrip()
             page_range = (
                 page_range_match.group(1).strip(),
                 page_range_match.group(2).strip(),
@@ -414,7 +422,7 @@ class Reference:
                     journal = Journal(journal_name, journal_extra)
                     volume = journal_volume
                     volume_issue_string = volume_match.group()
-                article = article.strip()
+                article = article.rstrip()
                 if article and regex.match(r"\p{Punct}", article[-1]):
                     article = article[:-1]
             else:
@@ -448,16 +456,18 @@ class Reference:
             page_range_string,
             volume_issue_string,
             journal_string,
+            article_position
         )
 
     @staticmethod
-    def split_three_words(s: str) -> Optional[Tuple[str, str]]:
+    def split_three_words(s: str) -> Optional[Tuple[str, str, int]]:
         three_words_regex = regex.compile(
             r"[^\s.]*[[:lower:]][^\s.]*\s+[^\s.]*[[:lower:]][^\s.]*\s+[^\s.]*[[:lower:]][^\s.]*"
         )
         three_words_match = three_words_regex.search(s)
         if three_words_regex:
-            return s[: three_words_match.start()], s[three_words_match.start():]
+            return (s[: three_words_match.start()], s[three_words_match.start():],
+                    three_words_match.start())
         else:
             return None
 
