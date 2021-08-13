@@ -3,6 +3,8 @@
 import regex
 from typing import Tuple, Optional, NamedTuple, Iterator
 
+from library.utils import normalize_space
+
 
 class TagPosition(NamedTuple):
     start: int
@@ -15,7 +17,7 @@ class LocatedTag(NamedTuple):
 
 
 def _find_tag(input: str, tag: str) -> Optional[TagPosition]:
-    tag_match = regex.search(r'<\s*' + tag + r'[^>]>', input, flags=regex.IGNORECASE)
+    tag_match = regex.search(r'<\s*' + tag + r'[^>]*>', input, flags=regex.IGNORECASE)
     if tag_match:
         return TagPosition(tag_match.start(), tag_match.end())
     else:
@@ -23,7 +25,7 @@ def _find_tag(input: str, tag: str) -> Optional[TagPosition]:
 
 
 def _next_tag(input: str) -> Optional[LocatedTag]:
-    tag_match = regex.search(r'<\s*(\w+)[^>]>', input, flags=regex.IGNORECASE)
+    tag_match = regex.search(r'<\s*(\w+)[^>]*>', input, flags=regex.IGNORECASE)
     if tag_match:
         return LocatedTag(tag_match.group(1).casefold(),
                           TagPosition(tag_match.start(), tag_match.end()))
@@ -36,8 +38,9 @@ class ListEntry(NamedTuple):
     content: str
 
     @staticmethod
-    def construct(entry: str) -> ListEntry:
-        decoration_match = regex.fullmatch(r'(<\s*(\w+)[^>]>)(.*?)(</\2>)?', entry)
+    def construct(entry: str) -> 'ListEntry':
+        entry = normalize_space(entry.strip())
+        decoration_match = regex.fullmatch(r'(<\s*(\w+)[^>]*>)(.*?)(</\2>)?', entry)
         if decoration_match:
             return ListEntry(decoration_match.group(1), decoration_match.group(3))
         else:
