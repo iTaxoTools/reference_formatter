@@ -8,6 +8,7 @@ import regex
 
 from library.utils import *
 from library.journal_list import JournalMatcher, NameForm
+from library.handle_html import ExtractedTags
 
 
 class LastSeparator(IntEnum):
@@ -248,6 +249,7 @@ class Reference:
         self.page_range_string = page_range_string
         self.volume_issue_string = volume_issue_string
         self.journal_string = journal_string
+        self.article_position = article_position
 
     def format_authors(self, options: OptionsDict) -> str:
         if not options[Options.ProcessAuthorsAndYear]:
@@ -294,6 +296,12 @@ class Reference:
         else:
             return self.year_string
 
+    def format_article(self, options: OptionsDict, tags: Optional[ExtractedTags]) -> str:
+        if not tags:
+            return self.article
+        else:
+            return tags.insert_tags(self.article, self.article_position)
+
     def format_journal(self, options: OptionsDict) -> str:
         if options[Options.ProcessJournalName]:
             if self.journal:
@@ -325,7 +333,7 @@ class Reference:
         else:
             return self.page_range_string
 
-    def format_reference(self, options: OptionsDict):
+    def format_reference(self, options: OptionsDict, tags: Optional[ExtractedTags]):
         return (
             self.format_numbering(options)
             + " "
@@ -333,7 +341,7 @@ class Reference:
             + " "
             + self.format_year(options)
             + " "
-            + self.article
+            + self.format_article(options, tags)
             + self.format_journal(options)
             + " "
             + self.format_volume(options)
@@ -538,14 +546,14 @@ def process_reference_file(
             parsed_line = parse_line(line, journal_matcher)
             if isinstance(parsed_line, str) and prev_reference:  # line is doi
                 prev_reference.doi = "\n" + parsed_line
-                print(prev_reference.format_reference(options), file=outfile)
+                print(prev_reference.format_reference(options, None), file=outfile)
                 prev_reference = None
             elif isinstance(parsed_line, Reference):
                 if prev_reference:
-                    print(prev_reference.format_reference(options), file=outfile)
+                    print(prev_reference.format_reference(options, None), file=outfile)
                 prev_reference = parsed_line
             else:
                 print("*", line, sep="", file=outfile)
                 continue
         if prev_reference:
-            print(prev_reference.format_reference(options), file=outfile)
+            print(prev_reference.format_reference(options, None), file=outfile)
