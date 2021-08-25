@@ -35,6 +35,13 @@ def _next_tag(input: str) -> Optional[LocatedTag]:
         return None
 
 
+def _close_tag(tag: str) -> str:
+    tag_name_match = regex.match(r'\s*<\s*(\w+)', tag)
+    if not tag_name_match:
+        raise ValueError(f"{tag} is not an opening tag")
+    return "</" + tag_name_match.group(1) + ">"
+
+
 class ListEntry(NamedTuple):
     decoration: Optional[str]
     content: str
@@ -47,6 +54,12 @@ class ListEntry(NamedTuple):
             return ListEntry(decoration_match.group(1), decoration_match.group(3))
         else:
             return ListEntry(None, entry)
+
+    def to_str(self) -> str:
+        if not self.decoration:
+            return self.content
+        else:
+            return self.decoration + self.content + _close_tag(self.decoration)
 
 
 class HTMLList():
@@ -71,6 +84,29 @@ class HTMLList():
             return self._paragraphs_next()
         else:
             return self._list_next()
+
+    def assemble_html(self, list: Iterator[ListEntry]) -> Iterator[str]:
+        """
+        Puts list entries in `list` back into the input html
+        """
+        yield self.preamble
+        if self._list_type == HTMLList.UNORDERED:
+            list_tag: Optional[str] = "<ul>"
+        elif self._list_type == HTMLList.ORDERED:
+            list_tag = "<ol>"
+        else:
+            list_tag = None
+        if list_tag:
+            yield "\t" * 2 + list_tag
+        for entry in list:
+            if list_tag:
+                yield "\t" * 3 + "<li>"
+            yield "\t" * 4 + entry.to_str()
+            if list_tag:
+                yield "\t" * 3 + "</li>"
+        if list_tag:
+            yield "\t" * 2 + _close_tag(list_tag)
+        yield "\t</body>\n</html>"
 
     def _separate_preamble(self) -> None:
         located_body = _find_tag(self._input, 'body')
