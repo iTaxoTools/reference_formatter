@@ -51,7 +51,7 @@ class ListEntry(NamedTuple):
         entry = normalize_space(entry.strip())
         decoration_match = regex.fullmatch(r'(<\s*(\w+)[^>]*>)(.*?)(</\2>)?', entry)
         if decoration_match:
-            return ListEntry(decoration_match.group(1), decoration_match.group(3))
+            return ListEntry(decoration_match.group(1), decoration_match.group(3).strip())
         else:
             return ListEntry(None, entry)
 
@@ -187,6 +187,8 @@ class ExtractedTags:
         self._tags: List[Tuple[int, str]] = list(zip(map(len, parts), tags))
 
     def insert_tags(self, s: str, offset: int) -> str:
+        if not self._tags:
+            return s
         total_offset = - offset
         parts: List[str] = []
         for tag_offset, tag in self._tags:

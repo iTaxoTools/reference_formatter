@@ -566,8 +566,7 @@ def processed_references(html: HTMLList, options: OptionsDict, journal_matcher: 
         if not ref:
             yield entry
         else:
-            entry.content = ref.format_reference(options, tags)
-            yield entry
+            yield entry._replace(content=ref.format_reference(options, tags))
 
 
 def process_reference_html(

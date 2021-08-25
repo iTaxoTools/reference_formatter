@@ -12,6 +12,7 @@ from library.citation import (
     Options,
     OptionsDict,
     process_reference_file,
+    process_reference_html,
     options_on_by_default,
 )
 from library.journal_list import JournalMatcher
@@ -130,9 +131,13 @@ class FmtGui(ttk.Frame):
             self.update()
         try:
             with open(self.input_file.get(), errors="replace") as infile:
-                process_reference_file(
-                    infile, self.preview_dir, options, self.journal_matcher
-                )
+                if options[Options.HtmlFormat]:
+                    process_reference_html(
+                        infile, self.preview_dir, options, self.journal_matcher)
+                else:
+                    process_reference_file(
+                        infile, self.preview_dir, options, self.journal_matcher
+                    )
         except FileNotFoundError:
             tkmessagebox.showerror(
                 "Error", f"File {self.input_file.get()} cannot be opened"
