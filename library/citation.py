@@ -8,7 +8,7 @@ import regex
 
 from library.utils import *
 from library.journal_list import JournalMatcher, NameForm
-from library.handle_html import ExtractedTags
+from library.handle_html import ExtractedTags, HTMLList, extract_tags, ListEntry
 
 
 class LastSeparator(IntEnum):
@@ -557,3 +557,26 @@ def process_reference_file(
                 continue
         if prev_reference:
             print(prev_reference.format_reference(options, None), file=outfile)
+
+
+def processed_references(html: HTMLList, options: OptionsDict, journal_matcher: Optional[JournalMatcher]) -> Iterator[ListEntry]:
+    for entry in html:
+        ref_text, tags = extract_tags(entry.content)
+        ref = Reference.parse(ref_text, journal_matcher)
+        if not ref:
+            yield entry
+        else:
+            entry.content = ref.format_reference(options, tags)
+            yield entry
+
+
+def process_reference_html(
+        input: TextIO,
+        output_dir: str,
+        options: OptionsDict,
+        journal_matcher: Optional[JournalMatcher],
+):
+    with open(os.path.join(output_dir, "output"), mode="w") as outfile:
+        html = HTMLList(input.read())
+        for chunk in html.assemble_html(processed_references(html, options, journal_matcher)):
+            print(chunk, file=outfile)
