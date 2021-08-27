@@ -8,6 +8,7 @@ import regex
 
 from library.utils import *
 from library.journal_list import JournalMatcher, NameForm
+from library.handle_html import ExtractedTags, HTMLList, extract_tags, ListEntry
 
 
 class LastSeparator(IntEnum):
@@ -125,6 +126,7 @@ class Options(Enum):
         "Format volume number (and issue number) with:",
     )
     PageRangeSeparator = (PageSeparator, "Use as page range separator")
+    HtmlFormat = (bool, "HTML format")
 
     def __init__(self, type: type, description: str):
         self.type = type
@@ -231,6 +233,7 @@ class Reference:
         page_range_string: str,
         volume_issue_string: str,
         journal_string: str,
+        article_position: int,
     ):
         self.numbering = numbering
         self.authors = authors
@@ -246,6 +249,7 @@ class Reference:
         self.page_range_string = page_range_string
         self.volume_issue_string = volume_issue_string
         self.journal_string = journal_string
+        self.article_position = article_position
 
     def format_authors(self, options: OptionsDict) -> str:
         if not options[Options.ProcessAuthorsAndYear]:
@@ -292,6 +296,12 @@ class Reference:
         else:
             return self.year_string
 
+    def format_article(self, options: OptionsDict, tags: Optional[ExtractedTags]) -> str:
+        if not tags:
+            return self.article
+        else:
+            return tags.insert_tags(self.article, self.article_position)
+
     def format_journal(self, options: OptionsDict) -> str:
         if options[Options.ProcessJournalName]:
             if self.journal:
@@ -323,7 +333,7 @@ class Reference:
         else:
             return self.page_range_string
 
-    def format_reference(self, options: OptionsDict):
+    def format_reference(self, options: OptionsDict, tags: Optional[ExtractedTags]):
         return (
             self.format_numbering(options)
             + " "
@@ -331,7 +341,7 @@ class Reference:
             + " "
             + self.format_year(options)
             + " "
-            + self.article
+            + self.format_article(options, tags)
             + self.format_journal(options)
             + " "
             + self.format_volume(options)
@@ -346,10 +356,12 @@ class Reference:
         s: str, journal_matcher: Optional[JournalMatcher]
     ) -> Optional["Reference"]:
         s, doi = parse_doi(s)
+        article_position = 0
         numbering_match = regex.match(r"\d+\.?\s", s)
         if numbering_match:
             numbering = numbering_match.group(0).strip()
             s = s[numbering_match.end():].strip()
+            article_position += numbering_match.end()
         else:
             numbering = None
         terminal_year_match = regex.search(r"\((\d+)\)\S?$", s)
@@ -358,7 +370,8 @@ class Reference:
                 s[: terminal_year_match.start()]
             )
             if authors_article:
-                authors, article = authors_article
+                authors, article, position = authors_article
+                article_position += position
             else:
                 return None
             year = int(terminal_year_match.group(1))
@@ -370,17 +383,20 @@ class Reference:
             year_start, year_end = year_match.span()
             authors = s[:year_start]
             article = s[year_end:]
+            article_position += year_end
             year = int(year_match.group(1))
             year_string = year_match.group()
         authors = authors.strip()
         authors_string = authors
+        whitespace_length = regex.match(r'\s*', article).start()
         article = article.strip()
+        article_position += whitespace_length
         page_range_regex = regex.compile(
             r"(?:pp\.)?\s*([A-Za-z]*\d+)\s?[-‐‑‒–—―]\s?([A-Za-z]*\d+)\S?$"
         )
         page_range_match = page_range_regex.search(article)
         if page_range_match:
-            article = article[: page_range_match.start()].strip()
+            article = article[: page_range_match.start()].rstrip()
             page_range = (
                 page_range_match.group(1).strip(),
                 page_range_match.group(2).strip(),
@@ -414,7 +430,7 @@ class Reference:
                     journal = Journal(journal_name, journal_extra)
                     volume = journal_volume
                     volume_issue_string = volume_match.group()
-                article = article.strip()
+                article = article.rstrip()
                 if article and regex.match(r"\p{Punct}", article[-1]):
                     article = article[:-1]
             else:
@@ -448,16 +464,18 @@ class Reference:
             page_range_string,
             volume_issue_string,
             journal_string,
+            article_position
         )
 
     @staticmethod
-    def split_three_words(s: str) -> Optional[Tuple[str, str]]:
+    def split_three_words(s: str) -> Optional[Tuple[str, str, int]]:
         three_words_regex = regex.compile(
             r"[^\s.]*[[:lower:]][^\s.]*\s+[^\s.]*[[:lower:]][^\s.]*\s+[^\s.]*[[:lower:]][^\s.]*"
         )
         three_words_match = three_words_regex.search(s)
         if three_words_regex:
-            return s[: three_words_match.start()], s[three_words_match.start():]
+            return (s[: three_words_match.start()], s[three_words_match.start():],
+                    three_words_match.start())
         else:
             return None
 
@@ -528,14 +546,36 @@ def process_reference_file(
             parsed_line = parse_line(line, journal_matcher)
             if isinstance(parsed_line, str) and prev_reference:  # line is doi
                 prev_reference.doi = "\n" + parsed_line
-                print(prev_reference.format_reference(options), file=outfile)
+                print(prev_reference.format_reference(options, None), file=outfile)
                 prev_reference = None
             elif isinstance(parsed_line, Reference):
                 if prev_reference:
-                    print(prev_reference.format_reference(options), file=outfile)
+                    print(prev_reference.format_reference(options, None), file=outfile)
                 prev_reference = parsed_line
             else:
                 print("*", line, sep="", file=outfile)
                 continue
         if prev_reference:
-            print(prev_reference.format_reference(options), file=outfile)
+            print(prev_reference.format_reference(options, None), file=outfile)
+
+
+def processed_references(html: HTMLList, options: OptionsDict, journal_matcher: Optional[JournalMatcher]) -> Iterator[ListEntry]:
+    for entry in html:
+        ref_text, tags = extract_tags(entry.content)
+        ref = Reference.parse(ref_text, journal_matcher)
+        if not ref:
+            yield entry
+        else:
+            yield entry._replace(content=ref.format_reference(options, tags))
+
+
+def process_reference_html(
+        input: TextIO,
+        output_dir: str,
+        options: OptionsDict,
+        journal_matcher: Optional[JournalMatcher],
+):
+    with open(os.path.join(output_dir, "output"), mode="w") as outfile:
+        html = HTMLList(input.read())
+        for chunk in html.assemble_html(processed_references(html, options, journal_matcher)):
+            print(chunk, file=outfile)
