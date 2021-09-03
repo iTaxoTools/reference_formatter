@@ -108,6 +108,33 @@ class PageSeparator(IntEnum):
         return start + "-‐‒–—"[self] + end
 
 
+class Style(IntEnum):
+    Preserve = 0
+    Normal = 1
+    Italics = 2
+    Bold = 3
+    SmallCaps = 4
+
+    def __str__(self) -> str:
+        return [
+            "preserve",
+            "normal",
+            "italics",
+            "bold",
+            "small caps"
+        ][self]
+
+    def style(self, s: str) -> str:
+        tags = [
+            ("", ""),
+            ("", ""),
+            ("<i>", "</i>"),
+            ("<b>", "</b>"),
+            ("<span style=\"font-variant: small-caps\">", "</span>")
+        ]
+        return tags[self][0] + s + tags[self][1]
+
+
 class Options(Enum):
     ProcessAuthorsAndYear = (bool, "Convert authors and year of publication")
     ProcessPageRangeVolume = (bool, "Convert page range and volume/issue number")
@@ -128,6 +155,9 @@ class Options(Enum):
     )
     PageRangeSeparator = (PageSeparator, "Use as page range separator")
     HtmlFormat = (bool, "HTML format")
+    SurnameStyle = (Style, "Style authors' surnames")
+    JournalStyle = (Style, "Style journal name")
+    VolumeStyle = (Style, "Style volume number")
 
     def __init__(self, type: type, description: str):
         self.type = type
@@ -176,7 +206,10 @@ class Author:
         else:
             initials = self.initials
         if options[Options.HtmlFormat]:
-            surname = tags.surround_tags(self.surname, self.span.start)
+            if options[Options.SurnameStyle] == Style.Preserve:
+                surname = tags.surround_tags(self.surname, self.span.start)
+            else:
+                surname = options[Options.SurnameStyle].style(self.surname)
         else:
             surname = self.surname
         if options[Options.InitialsBefore] and not first:
@@ -211,7 +244,10 @@ class Journal:
     def format(self, options: OptionsDict, tags: ExtractedTags, span: slice) -> str:
         journal_name = self.name[options[Options.JournalNameForm]]
         if options[Options.HtmlFormat]:
-            journal_name = tags.surround_tags(journal_name, span.start)
+            if options[Options.JournalStyle] == Style.Preserve:
+                journal_name = tags.surround_tags(journal_name, span.start)
+            else:
+                journal_name = options[Options.SurnameStyle].style(journal_name)
         formatted_name = (
             options[Options.JournalSeparator].format()
             + " "
@@ -312,11 +348,14 @@ class Reference(NamedTuple):
             return self.unparsed[self.volume[2]]
         volume, issue, span = self.volume
         formatted_issue = f" ({issue})" if issue else ""
-        return (
+        formatted_volume = (
             volume
             + (formatted_issue if options[Options.RemoveIssue] else "")
             + options[Options.VolumeFormatting].format()
         )
+        if options[Options.HtmlFormat] and options[Options.VolumeStyle] != Style.Preserve:
+            formatted_volume = options[Options.VolumeStyle].style(formatted_volume)
+        return formatted_volume
 
     def format_page_range(self, options: OptionsDict) -> str:
         if self.page_range:
