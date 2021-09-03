@@ -2,6 +2,7 @@
 
 import html
 import itertools
+import logging
 from typing import Tuple, Optional, NamedTuple, Iterator, List
 
 import regex
@@ -54,9 +55,14 @@ class ListEntry(NamedTuple):
     @staticmethod
     def construct(entry: str) -> 'ListEntry':
         entry = normalize_space(entry.strip())
-        decoration_match = regex.fullmatch(r'(<\s*(\w+)[^>]*>)(.*?)(</\2>)?', entry)
-        if decoration_match:
-            return ListEntry(decoration_match.group(1), decoration_match.group(3).strip())
+        decoration_open_match = regex.match(r'<\s*(\w+)[^>]*>', entry)
+        if decoration_open_match:
+            entry = entry[decoration_open_match.end():]
+            tag_name = decoration_open_match.group(1)
+            decoration_close_match = regex.search(r'</\s*' + tag_name + r'\s*>$', entry)
+            if decoration_close_match:
+                entry = entry[:decoration_close_match.start()]
+            return ListEntry(decoration_open_match.group(0), entry)
         else:
             return ListEntry(None, entry)
 
@@ -127,7 +133,8 @@ class HTMLList():
     def _detect_list_type(self) -> None:
         first_body_tag = _next_tag(self._input)
         if not first_body_tag:
-            raise ValueError("The reference list is unstructured")
+            logging.error("Can't detect the structure of the reference list")
+            raise ValueError("Can't detect the structure of the reference list")
         if first_body_tag.name == "ul":
             self._list_type = HTMLList.UNORDERED
         elif first_body_tag.name == "ol":
@@ -135,7 +142,8 @@ class HTMLList():
         elif first_body_tag.name == "p":
             self._list_type = HTMLList.PARAGRAPHS
         else:
-            raise ValueError("Can't detect the structure of the reference list")
+            self._input = self._input[first_body_tag.position.end:]
+            self._detect_list_type()
 
     def _list_next(self) -> ListEntry:
         li_tag = _find_tag(self._input, "li")

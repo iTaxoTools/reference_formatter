@@ -227,7 +227,7 @@ def parse_doi(line: PositionedString) -> Tuple[PositionedString, Optional[slice]
     doi_match = line.search(doi_regex)
     if doi_match:
         rest, doi, _ = line.match_partition(doi_match)
-        return rest, doi
+        return rest, doi.slice()
     else:
         return (line, None)
 

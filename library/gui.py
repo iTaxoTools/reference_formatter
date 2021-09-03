@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import logging
 from typing import Dict, Optional, Union
 import tkinter as tk
 import tkinter.ttk as ttk
@@ -16,6 +17,32 @@ from library.citation import (
     options_on_by_default,
 )
 from library.journal_list import JournalMatcher
+
+
+class TkWarnLogger(logging.Handler):
+    """Displays warnings with TK messagebox"""
+
+    def __init__(self, level=logging.NOTSET):
+        logging.Handler.__init__(self, level)
+        self.addFilter(lambda record: record.levelno == logging.WARNING)
+
+    def emit(self, record: logging.LogRecord) -> None:
+        tkmessagebox.showwarning("Warning", record.getMessage())
+        print(record.pathname, record.lineno, sep=": ")
+        print("Warning:", record.getMessage(), "\n")
+
+
+class TkErrorLogger(logging.Handler):
+    """Displays errors with TK messagebox"""
+
+    def __init__(self, level=logging.NOTSET):
+        logging.Handler.__init__(self, level)
+        self.addFilter(lambda record: record.levelno == logging.ERROR)
+
+    def emit(self, record: logging.LogRecord) -> None:
+        tkmessagebox.showerror("Error", record.getMessage())
+        print(record.pathname, record.lineno, sep=": ")
+        print("Error:", record.getMessage(), "\n")
 
 
 class FmtParameters(ttk.LabelFrame):
@@ -81,6 +108,10 @@ class FmtGui(ttk.Frame):
         self.columnconfigure(1, weight=1)
 
         self.grid(sticky="nsew")
+        logger = logging.getLogger()
+        logger.addHandler(TkWarnLogger())
+        logger.addHandler(TkErrorLogger())
+        logger.setLevel(logging.WARNING)
 
     def create_top_frame(self) -> None:
         self.top_frame = ttk.Frame(self)
