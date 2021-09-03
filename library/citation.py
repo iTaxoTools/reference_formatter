@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from enum import IntEnum, Enum
-from typing import Dict, List, Optional, Iterator, Any, TextIO, Tuple, Union, Set
+from typing import Dict, List, Optional, Iterator, Any, TextIO, Tuple, Union, Set, NamedTuple
 import os
 
 import regex
@@ -9,6 +9,7 @@ import regex
 from library.utils import *
 from library.journal_list import JournalMatcher, NameForm
 from library.handle_html import ExtractedTags, HTMLList, extract_tags, ListEntry
+from library.positioned import PositionedString
 
 
 class LastSeparator(IntEnum):
@@ -107,6 +108,33 @@ class PageSeparator(IntEnum):
         return start + "-‐‒–—"[self] + end
 
 
+class Style(IntEnum):
+    Preserve = 0
+    Normal = 1
+    Italics = 2
+    Bold = 3
+    SmallCaps = 4
+
+    def __str__(self) -> str:
+        return [
+            "preserve",
+            "normal",
+            "italics",
+            "bold",
+            "small caps"
+        ][self]
+
+    def style(self, s: str) -> str:
+        tags = [
+            ("", ""),
+            ("", ""),
+            ("<i>", "</i>"),
+            ("<b>", "</b>"),
+            ("<span style=\"font-variant: small-caps\">", "</span>")
+        ]
+        return tags[self][0] + s + tags[self][1]
+
+
 class Options(Enum):
     ProcessAuthorsAndYear = (bool, "Convert authors and year of publication")
     ProcessPageRangeVolume = (bool, "Convert page range and volume/issue number")
@@ -127,6 +155,9 @@ class Options(Enum):
     )
     PageRangeSeparator = (PageSeparator, "Use as page range separator")
     HtmlFormat = (bool, "HTML format")
+    SurnameStyle = (Style, "Style authors' surnames")
+    JournalStyle = (Style, "Style journal name")
+    VolumeStyle = (Style, "Style volume number")
 
     def __init__(self, type: type, description: str):
         self.type = type
@@ -155,15 +186,16 @@ def default_options() -> OptionsDict:
 
 
 class Author:
-    def __init__(self, surname: Optional[str] = None, initials: Optional[str] = None):
+    def __init__(self, span: slice, surname: Optional[str] = None, initials: Optional[str] = None):
         if surname is None or initials is None:
             self.is_et_al = True
             return
         self.is_et_al = False
         self.surname = surname
         self.initials = initials.replace(" ", "")
+        self.span = span
 
-    def format_author(self, options: OptionsDict, first: bool):
+    def format_author(self, options: OptionsDict, first: bool, tags: ExtractedTags):
         if self.is_et_al:
             if options[Options.InitialsNoPeriod]:
                 return "et al"
@@ -173,21 +205,29 @@ class Author:
             initials = self.initials.replace(".", "")
         else:
             initials = self.initials
-        if options[Options.InitialsBefore] and not first:
-            return initials + " " + self.surname
+        if options[Options.HtmlFormat]:
+            if options[Options.SurnameStyle] == Style.Preserve:
+                surname = tags.surround_tags(self.surname, self.span.start)
+            else:
+                surname = options[Options.SurnameStyle].style(self.surname)
         else:
-            return self.surname + ", " + initials
+            surname = self.surname
+        if options[Options.InitialsBefore] and not first:
+            return initials + " " + surname
+        else:
+            return surname + ", " + initials
 
 
-def parse_doi(line: str) -> Tuple[str, Optional[str]]:
+def parse_doi(line: PositionedString) -> Tuple[PositionedString, Optional[slice]]:
     """
     Parses line as line == rest + doi and returns (rest, doi).
     Returns (line, None) is the line doesn't contain doi
     """
     doi_regex = regex.compile(r"https?:.*doi.*$|\bdoi: ?[^ ]*$")
-    doi_match = doi_regex.search(line)
+    doi_match = line.search(doi_regex)
     if doi_match:
-        return (line[: doi_match.start()], doi_match.group(0))
+        rest, doi, _ = line.match_partition(doi_match)
+        return rest, doi.slice()
     else:
         return (line, None)
 
@@ -201,11 +241,17 @@ class Journal:
         self.name = name
         self.extra = extra
 
-    def format(self, options: OptionsDict) -> str:
+    def format(self, options: OptionsDict, tags: ExtractedTags, span: slice) -> str:
+        journal_name = self.name[options[Options.JournalNameForm]]
+        if options[Options.HtmlFormat]:
+            if options[Options.JournalStyle] == Style.Preserve:
+                journal_name = tags.surround_tags(journal_name, span.start)
+            else:
+                journal_name = options[Options.SurnameStyle].style(journal_name)
         formatted_name = (
             options[Options.JournalSeparator].format()
             + " "
-            + self.name[options[Options.JournalNameForm]]
+            + journal_name
             + (self.extra or "")
         )
         if (
@@ -213,54 +259,36 @@ class Journal:
             and formatted_name[-1] == "."
         ):
             formatted_name = formatted_name[:-1]
+
         return formatted_name + options[Options.VolumeSeparator].format()
 
 
-class Reference:
-    def __init__(
-        self,
-        numbering: Optional[str],
-        authors: Optional[List[Author]],
-        year: int,
-        article: str,
-        journal: Optional[Journal],
-        volume: Optional[Tuple[str, Optional[str]]],
-        extra: str,
-        page_range: Optional[Tuple[str, str]],
-        doi: Optional[str],
-        authors_string: str,
-        year_string: str,
-        page_range_string: str,
-        volume_issue_string: str,
-        journal_string: str,
-        article_position: int,
-    ):
-        self.numbering = numbering
-        self.authors = authors
-        self.year = year
-        self.article = article
-        self.journal = journal
-        self.volume = volume
-        self.extra = extra
-        self.page_range = page_range
-        self.doi = doi
-        self.authors_string = authors_string
-        self.year_string = year_string
-        self.page_range_string = page_range_string
-        self.volume_issue_string = volume_issue_string
-        self.journal_string = journal_string
-        self.article_position = article_position
+class Reference(NamedTuple):
+    numbering: Optional[slice]
+    authors: Tuple[Optional[List[Author]], slice]
+    year: Tuple[int, slice]
+    article: slice
+    journal: Optional[Tuple[Journal, slice]]
+    volume: Optional[Tuple[str, Optional[str], slice]]
+    extra: slice
+    page_range: Optional[Tuple[str, str, slice]]
+    doi: Optional[slice]
+    unparsed: str
 
-    def format_authors(self, options: OptionsDict) -> str:
-        if not options[Options.ProcessAuthorsAndYear]:
-            return self.authors_string
-        if not self.authors:
-            return self.authors_string
+    def append_doi(self, doi: str) -> None:
+        start = len(self.unparsed)
+        end = start + len(doi)
+        self._replace(unparsed=(self.unparsed + doi), doi=slice(start, end))
+
+    def format_authors(self, options: OptionsDict, tags: ExtractedTags) -> str:
+        authors, authors_span = self.authors
+        if (not options[Options.ProcessAuthorsAndYear]) or not authors:
+            return self.unparsed[authors_span]
         formatted_authors = (
-            author.format_author(options, i == 0)
-            for i, author in enumerate(self.authors)
+            author.format_author(options, i == 0, tags)
+            for i, author in enumerate(authors)
         )
-        *authors, last_author = formatted_authors
+        *authors_str, last_author = formatted_authors
         if not options[Options.YearFormat].has_paren():
             if options[Options.InitialsBefore] or options[Options.InitialsNoPeriod]:
                 end_sep = "."
@@ -268,11 +296,11 @@ class Reference:
                 end_sep = ""
         else:
             end_sep = ""
-        if not authors:
+        if not authors_str:
             return last_author + end_sep
         else:
             return (
-                ", ".join(authors)
+                ", ".join(authors_str)
                 + str(options[Options.LastNameSep])
                 + last_author
                 + end_sep
@@ -280,7 +308,7 @@ class Reference:
 
     def format_numbering(self, options: OptionsDict) -> str:
         if options[Options.KeepNumbering] and self.numbering:
-            return self.numbering
+            return self.unparsed[self.numbering]
         else:
             return ""
 
@@ -288,61 +316,67 @@ class Reference:
         if options[Options.RemoveDoi]:
             return ""
         else:
-            return self.doi or ""
+            return self.unparsed[self.doi or slice(0, 0)]
 
     def format_year(self, options: OptionsDict) -> str:
         if options[Options.ProcessAuthorsAndYear]:
-            return options[Options.YearFormat].format_year(self.year)
+            return options[Options.YearFormat].format_year(self.year[0])
         else:
-            return self.year_string
+            return self.unparsed[self.year[1]]
 
     def format_article(self, options: OptionsDict, tags: Optional[ExtractedTags]) -> str:
+        article = self.unparsed[self.article]
+        article_position = self.article.indices(len(self.unparsed))[0]
         if not tags:
-            return self.article
+            return article
         else:
-            return tags.insert_tags(self.article, self.article_position)
+            return tags.insert_tags(article, article_position)
 
-    def format_journal(self, options: OptionsDict) -> str:
-        if options[Options.ProcessJournalName]:
-            if self.journal:
-                return self.journal.format(options)
+    def format_journal(self, options: OptionsDict, tags: ExtractedTags) -> str:
+        if self.journal:
+            if options[Options.ProcessJournalName]:
+                return self.journal[0].format(options, tags, self.journal[1])
             else:
-                return ""
+                return self.unparsed[self.journal[1]]
         else:
-            return self.journal_string
+            return ""
 
     def format_volume(self, options: OptionsDict) -> str:
-        if not options[Options.ProcessPageRangeVolume]:
-            return self.volume_issue_string
         if not self.volume:
             return ""
-        volume, issue = self.volume
+        if not options[Options.ProcessPageRangeVolume]:
+            return self.unparsed[self.volume[2]]
+        volume, issue, span = self.volume
         formatted_issue = f" ({issue})" if issue else ""
-        return (
+        formatted_volume = (
             volume
             + (formatted_issue if options[Options.RemoveIssue] else "")
             + options[Options.VolumeFormatting].format()
         )
+        if options[Options.HtmlFormat] and options[Options.VolumeStyle] != Style.Preserve:
+            formatted_volume = options[Options.VolumeStyle].style(formatted_volume)
+        return formatted_volume
 
     def format_page_range(self, options: OptionsDict) -> str:
-        if options[Options.ProcessPageRangeVolume]:
-            if self.page_range:
-                return options[Options.PageRangeSeparator].format_range(self.page_range)
+        if self.page_range:
+            page_start, page_end, slice = self.page_range
+            if options[Options.ProcessPageRangeVolume]:
+                return options[Options.PageRangeSeparator].format_range((page_start, page_end))
             else:
-                return ""
+                return self.unparsed[slice]
         else:
-            return self.page_range_string
+            return ""
 
     def format_reference(self, options: OptionsDict, tags: Optional[ExtractedTags]):
         return (
             self.format_numbering(options)
             + " "
-            + self.format_authors(options)
+            + self.format_authors(options, tags)
             + " "
             + self.format_year(options)
             + " "
             + self.format_article(options, tags)
-            + self.format_journal(options)
+            + self.format_journal(options, tags)
             + " "
             + self.format_volume(options)
             + " "
@@ -353,139 +387,131 @@ class Reference:
 
     @staticmethod
     def parse(
-        s: str, journal_matcher: Optional[JournalMatcher]
+        line: str, journal_matcher: Optional[JournalMatcher]
     ) -> Optional["Reference"]:
+        s = PositionedString.new(line)
         s, doi = parse_doi(s)
-        article_position = 0
-        numbering_match = regex.match(r"\d+\.?\s", s)
+        numbering_match = s.match(r"\d+\.?\s")
         if numbering_match:
-            numbering = numbering_match.group(0).strip()
-            s = s[numbering_match.end():].strip()
-            article_position += numbering_match.end()
+            _, numbering, s = s.match_partition(numbering_match)
+            numbering = numbering.strip().slice()
+            s = s.strip()
         else:
             numbering = None
-        terminal_year_match = regex.search(r"\((\d+)\)\S?$", s)
+        terminal_year_match = s.search(r"\((\d+)\)\S?$")
         if terminal_year_match:
             authors_article = Reference.split_three_words(
                 s[: terminal_year_match.start()]
             )
             if authors_article:
-                authors, article, position = authors_article
-                article_position += position
+                authors, article = authors_article
             else:
                 return None
-            year = int(terminal_year_match.group(1))
-            year_string = terminal_year_match.group()
+            year = (int(terminal_year_match.group(1)), slice(
+                terminal_year_match.start(), terminal_year_match.end()))
         else:
-            year_match = regex.search(r"\(?(\d+)\)?\S?", s)
+            year_match = s.search(r"\(?(\d+)\)?\S?")
             if not year_match:
                 return None
-            year_start, year_end = year_match.span()
-            authors = s[:year_start]
-            article = s[year_end:]
-            article_position += year_end
-            year = int(year_match.group(1))
-            year_string = year_match.group()
+            authors, year_string, article = s.match_partition(year_match)
+            year = (int(year_match.group(1)), year_string.slice())
         authors = authors.strip()
-        authors_string = authors
-        whitespace_length = regex.match(r'\s*', article).start()
         article = article.strip()
-        article_position += whitespace_length
         page_range_regex = regex.compile(
             r"(?:pp\.)?\s*([A-Za-z]*\d+)\s?[-‐‑‒–—―]\s?([A-Za-z]*\d+)\S?$"
         )
-        page_range_match = page_range_regex.search(article)
+        page_range_match = article.search(page_range_regex)
         if page_range_match:
-            article = article[: page_range_match.start()].rstrip()
+            article, page_range_string, _ = article.match_partition(page_range_match)
             page_range = (
                 page_range_match.group(1).strip(),
                 page_range_match.group(2).strip(),
+                page_range_string.slice()
             )
-            page_range_string = page_range_match.group()
+            article = article.strip()
         else:
             page_range = None
-            page_range_string = ""
         if journal_matcher:
-            article, journal_name_tuple, extra = journal_matcher.extract_journal(
-                article
+            journal_name_tuple = journal_matcher.extract_journal(
+                article.content
             )
             if journal_name_tuple:
-                journal_name, journal_string = journal_name_tuple
-                extra = extra.strip()
+                journal_name, journal_span = journal_name_tuple
+                extra = article[journal_span.stop:].strip()
+                article = article[:journal_span.start]
                 volume_regex = regex.compile(
                     r"(?<vol>\d+)[,:]|(?<vol>\d+)\s*\((?<issue>\d[^)])\)|vol\S+\s*(?<vol>d+)\s*iss\S+\s*(?<issue>\d+)"
                 )
-                volume_match = volume_regex.search(extra)
+                volume_match = extra.search(volume_regex)
                 if not volume_match:
-                    journal = Journal(journal_name, None)
+                    journal = (
+                        Journal(journal_name, None),
+                        journal_span
+                    )
                     volume = None
-                    volume_issue_string = ""
                 else:
                     journal_extra = extra[: volume_match.start()].strip()
                     journal_volume = (
                         volume_match.group("vol"),
                         volume_match.group("issue"),
+                        slice(volume_match.start(), volume_match.end())
                     )
-                    extra = extra[volume_match.end():].strip()
-                    journal = Journal(journal_name, journal_extra)
+                    extra = extra[volume_match.end():].strip().slice()
+                    journal = (
+                        Journal(journal_name, journal_extra.content),
+                        journal_span
+                    )
                     volume = journal_volume
-                    volume_issue_string = volume_match.group()
-                article = article.rstrip()
-                if article and regex.match(r"\p{Punct}", article[-1]):
+                article = article.strip()
+                if article and regex.match(r"\p{Punct}", article[-1].content):
                     article = article[:-1]
             else:
                 journal = None
                 volume = None
-                journal_string = ""
-                volume_issue_string = ""
+                extra = slice(0, 0)
         else:
             journal = None
             volume = None
-            journal_string = ""
-            volume_issue_string = ""
-            extra = ""
+            extra = slice(0, 0)
         try:
-            authors_list = Reference.parse_authors(authors)
+            authors_list = (
+                Reference.parse_authors(authors),
+                authors.slice()
+            )
         except IndexError:  # parts.pop in extract_author
-            print("Unexpected name:\n", authors)
-            authors_list = None
+            print("Unexpected name:\n", authors.content)
+            authors_list = (None, authors.slice())
         return Reference(
             numbering,
             authors_list,
             year,
-            article,
+            article.slice(),
             journal,
             volume,
             extra,
             page_range,
             doi,
-            authors_string,
-            year_string,
-            page_range_string,
-            volume_issue_string,
-            journal_string,
-            article_position
+            line
         )
 
-    @staticmethod
-    def split_three_words(s: str) -> Optional[Tuple[str, str, int]]:
+    @ staticmethod
+    def split_three_words(s: PositionedString) -> Optional[Tuple[PositionedString, PositionedString]]:
         three_words_regex = regex.compile(
             r"[^\s.]*[[:lower:]][^\s.]*\s+[^\s.]*[[:lower:]][^\s.]*\s+[^\s.]*[[:lower:]][^\s.]*"
         )
-        three_words_match = three_words_regex.search(s)
+        three_words_match = s.search(three_words_regex)
         if three_words_regex:
-            return (s[: three_words_match.start()], s[three_words_match.start():],
-                    three_words_match.start())
+            return s[:three_words_match.start()], s[three_words_match.start():]
         else:
             return None
 
-    @staticmethod
-    def parse_authors(s: str) -> List[Author]:
+    @ staticmethod
+    def parse_authors(s: PositionedString) -> List[Author]:
         # try to separate the last author
         # after the loop parts_rest and last_part will be comma-separated lists of surnames and initials
         for lastsep in map(str, reversed(list(LastSeparator))):
             parts_rest, sep, last_part = s.partition(lastsep)
-            if sep:
+            if sep.is_nonempty():
                 break
         parts = [
             part.strip()
@@ -494,37 +520,44 @@ class Reference:
         ]
         return [author for author in Reference.extract_author(parts)]
 
-    @staticmethod
-    def extract_author(parts: List[str]) -> Iterator[Author]:
+    @ staticmethod
+    def extract_author(parts: List[PositionedString]) -> Iterator[Author]:
         while parts:
             part = parts.pop(0)
-            if regex.search("et al", part):
-                yield (Author())
+            if regex.search("et al", part.content):
+                yield (Author(part.slice()))
                 continue
-            find_surname = regex.search(
-                r"\p{Alpha}[\p{Lower}\'\u2019].*\p{Lower}", part
+            find_surname = part.search(
+                r"\p{Alpha}[\p{Lower}\'\u2019].*\p{Lower}"
             )
             if not find_surname:
-                initials = part
-                surname = parts.pop(0)
+                initials = part.content
+                surname_pos = parts.pop(0)
+                surname = surname_pos.content
+                surname_span = surname_pos.slice()
             elif find_surname.span() == (0, len(part)):
-                surname = part
-                initials = parts.pop(0)
+                surname = part.content
+                surname_span = part.slice()
+                initials = parts.pop(0).content
             elif find_surname.start() == 0:
-                surname = find_surname.group()
-                initials = part[find_surname.end() + 1:]
+                surname_pos = part.group(find_surname)
+                surname = surname_pos.content
+                surname_span = surname_pos.slice()
+                initials = part[find_surname.end() + 1:].content
             else:
-                surname = find_surname.group()
-                initials = part[: find_surname.start() - 1]
-            yield (Author(surname, initials))
+                surname_pos = part.group(find_surname)
+                surname = surname_pos.content
+                surname_span = surname_pos.slice()
+                initials = part[: find_surname.start() - 1].content
+            yield (Author(surname_span, surname, initials))
 
 
 def parse_line(
     line: str, journal_matcher: Optional[JournalMatcher]
 ) -> Union[Optional[Reference], str]:
-    (rest, doi) = parse_doi(line)
+    (rest, doi) = parse_doi(PositionedString.new(line))
     if not rest and doi:
-        return doi
+        return line[doi]
     else:
         return Reference.parse(line, journal_matcher)
 
@@ -546,6 +579,7 @@ def process_reference_file(
             parsed_line = parse_line(line, journal_matcher)
             if isinstance(parsed_line, str) and prev_reference:  # line is doi
                 prev_reference.doi = "\n" + parsed_line
+                prev_reference.replace_doi("\n" + parsed_line)
                 print(prev_reference.format_reference(options, None), file=outfile)
                 prev_reference = None
             elif isinstance(parsed_line, Reference):
