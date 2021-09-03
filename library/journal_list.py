@@ -9,6 +9,7 @@ import pandas as pd
 from ahocorasick_rs import AhoCorasick, MATCHKIND_LEFTMOST_LONGEST
 
 from library.utils import *
+from library.positioned import PositionedString
 
 resource_path = getattr(sys, "_MEIPASS", sys.path[0])
 
@@ -37,15 +38,16 @@ class JournalMatcher:
 
     def extract_journal(
         self, s: str
-    ) -> Tuple[str, Optional[Tuple[Dict[NameForm, str], str]], str]:
+    ) -> Optional[Tuple[Dict[NameForm, str], slice]]:
         matches = self.matcher.find_matches_as_indexes(s)
         if not matches:
-            return (s, None, "")
+            return None
         match_num, _, _ = matches[-1]
         journal_names = dict(self.table.iloc[match_num // N_NAME_FORMS])
         journal_name = journal_names[NameForm(match_num % N_NAME_FORMS)]
-        prefix, _, suffix = s.partition(journal_name)
-        return prefix, (journal_names, journal_name), suffix
+        start = s.index(journal_name)
+        end = start + len(journal_name)
+        return journal_names, slice(start, end)
 
 
 def load() -> pd.DataFrame:

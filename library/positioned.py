@@ -36,6 +36,12 @@ class PositionedString(NamedTuple):
         else:
             raise TypeError
 
+    def is_nonempty(self) -> bool:
+        return bool(self.content)
+
+    def slice(self) -> slice:
+        return slice(self.start, self.end)
+
     def strip(self, chars: Optional[str] = None) -> 'PositionedString':
         rstripped = self.content.rstrip(chars)
         new_end = self.end - (len(self.content) - len(rstripped))
@@ -78,7 +84,7 @@ class PositionedString(NamedTuple):
         )
 
     def split(self, sep: str) -> List['PositionedString']:
-        start = self.start
+        start = 0
         result: List['PositionedString'] = []
         for part in self.content.split(sep):
             result.append(self[start:start+len(part)])
