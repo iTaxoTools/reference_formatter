@@ -176,7 +176,7 @@ class Author:
         else:
             initials = self.initials
         if options[Options.HtmlFormat]:
-            surname = tags.insert_tags(self.surname, self.span.start)
+            surname = tags.surround_tags(self.surname, self.span.start)
         else:
             surname = self.surname
         if options[Options.InitialsBefore] and not first:
@@ -208,11 +208,14 @@ class Journal:
         self.name = name
         self.extra = extra
 
-    def format(self, options: OptionsDict) -> str:
+    def format(self, options: OptionsDict, tags: ExtractedTags, span: slice) -> str:
+        journal_name = self.name[options[Options.JournalNameForm]]
+        if options[Options.HtmlFormat]:
+            journal_name = tags.surround_tags(journal_name, span.start)
         formatted_name = (
             options[Options.JournalSeparator].format()
             + " "
-            + self.name[options[Options.JournalNameForm]]
+            + journal_name
             + (self.extra or "")
         )
         if (
@@ -220,6 +223,7 @@ class Journal:
             and formatted_name[-1] == "."
         ):
             formatted_name = formatted_name[:-1]
+
         return formatted_name + options[Options.VolumeSeparator].format()
 
 
@@ -292,10 +296,10 @@ class Reference(NamedTuple):
         else:
             return tags.insert_tags(article, article_position)
 
-    def format_journal(self, options: OptionsDict) -> str:
+    def format_journal(self, options: OptionsDict, tags: ExtractedTags) -> str:
         if self.journal:
             if options[Options.ProcessJournalName]:
-                return self.journal[0].format(options)
+                return self.journal[0].format(options, tags, self.journal[1])
             else:
                 return self.unparsed[self.journal[1]]
         else:
@@ -333,7 +337,7 @@ class Reference(NamedTuple):
             + self.format_year(options)
             + " "
             + self.format_article(options, tags)
-            + self.format_journal(options)
+            + self.format_journal(options, tags)
             + " "
             + self.format_volume(options)
             + " "

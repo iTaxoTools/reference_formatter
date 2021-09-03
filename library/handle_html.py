@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import html
+import itertools
 from typing import Tuple, Optional, NamedTuple, Iterator, List
 
 import regex
@@ -40,6 +41,10 @@ def _close_tag(tag: str) -> str:
     if not tag_name_match:
         raise ValueError(f"{tag} is not an opening tag")
     return "</" + tag_name_match.group(1) + ">"
+
+
+def is_closing(tag: str) -> bool:
+    return tag[:2] == "</"
 
 
 class ListEntry(NamedTuple):
@@ -185,6 +190,18 @@ class ExtractedTags:
 
     def __init__(self, parts: List[str], tags: List[str]):
         self._tags: List[Tuple[int, str]] = list(zip(map(len, parts), tags))
+
+    def surround_tags(self, s: str, offset: int) -> str:
+        opened_tags: List[str] = []
+        for tag_offset, tag in self._tags:
+            if tag_offset > offset:
+                break
+            if is_closing(tag):
+                if opened_tags:
+                    opened_tags.pop()
+            else:
+                opened_tags.append(tag)
+        return "".join(itertools.chain(opened_tags, [s], map(_close_tag, reversed(opened_tags))))
 
     def insert_tags(self, s: str, offset: int) -> str:
         if not self._tags:
