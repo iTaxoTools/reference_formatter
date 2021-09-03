@@ -135,6 +135,10 @@ class FmtGui(ttk.Frame):
                     process_reference_html(
                         infile, self.preview_dir, options, self.journal_matcher)
                 else:
+                    if self.input_has_html_extension():
+                        tkmessagebox.showwarning(
+                            "Warning", "Input might be html file."
+                            " Consider enabling \"HTML format\" option.")
                     process_reference_file(
                         infile, self.preview_dir, options, self.journal_matcher
                     )
@@ -145,6 +149,10 @@ class FmtGui(ttk.Frame):
         else:
             self.make_preview()
             tkmessagebox.showinfo("Done", "Processing is complete")
+
+    def input_has_html_extension(self) -> bool:
+        _, ext = os.path.splitext(self.input_file.get())
+        return ext.startswith(".htm")
 
     def create_preview_frame(self) -> None:
         self.preview_frame = ttk.LabelFrame(self, text="Preview")
