@@ -247,7 +247,7 @@ class Journal:
             if options[Options.JournalStyle] == Style.Preserve:
                 journal_name = tags.surround_tags(journal_name, span.start)
             else:
-                journal_name = options[Options.SurnameStyle].style(journal_name)
+                journal_name = options[Options.JournalStyle].style(journal_name)
         formatted_name = (
             options[Options.JournalSeparator].format()
             + " "
