@@ -2,6 +2,7 @@
 
 import logging
 from typing import Dict, Optional, Union
+from tkinterweb import HtmlFrame
 import tkinter as tk
 import tkinter.ttk as ttk
 import tkinter.filedialog as tkfiledialog
@@ -146,6 +147,15 @@ class FmtGui(ttk.Frame):
         preview_file_path = os.path.join(self.preview_dir, "output")
         with open(preview_file_path) as preview_file:
             self.preview.insert("1.0", preview_file.read())
+        self.html_preview.load_file(preview_file_path, force=True)
+
+    def switch_preview(self) -> None:
+        if self.make_rendered.get():
+            self.plain_preview.grid_remove()
+            self.html_preview.grid()
+        else:
+            self.html_preview.grid_remove()
+            self.plain_preview.grid()
 
     def run_command(self) -> None:
         self.clear_command()
@@ -187,20 +197,34 @@ class FmtGui(ttk.Frame):
 
     def create_preview_frame(self) -> None:
         self.preview_frame = ttk.LabelFrame(self, text="Preview")
-        self.preview_frame.rowconfigure(0, weight=1)
+        self.preview_frame.rowconfigure(1, weight=1)
         self.preview_frame.columnconfigure(0, weight=1)
 
-        self.preview = tk.Text(self.preview_frame, height=15, width=30, wrap="none")
+        self.make_rendered = tk.BooleanVar(value=False)
+        ttk.Checkbutton(self.preview_frame, text="Preview rendered", variable=self.make_rendered, command=self.switch_preview).grid(
+            row=0, column=0, sticky="w")
+
+        self.plain_preview = ttk.Frame(self.preview_frame)
+        self.plain_preview.rowconfigure(0, weight=1)
+        self.plain_preview.columnconfigure(0, weight=1)
+        self.plain_preview.grid(row=1, column=0, sticky="nsew")
+
+        self.preview = tk.Text(self.plain_preview, height=15, width=30, wrap="none")
         self.preview.grid(row=0, column=0, sticky="nsew")
 
         yscroll = ttk.Scrollbar(
-            self.preview_frame, orient="vertical", command=self.preview.yview
+            self.plain_preview, orient="vertical", command=self.preview.yview
         )
         self.preview.config(yscrollcommand=yscroll.set)
         yscroll.grid(row=0, column=1, sticky="nsew")
 
         xscroll = ttk.Scrollbar(
-            self.preview_frame, orient="horizontal", command=self.preview.xview
+            self.plain_preview, orient="horizontal", command=self.preview.xview
         )
         self.preview.config(xscrollcommand=xscroll.set)
         xscroll.grid(row=1, column=0, sticky="nsew")
+
+        self.html_preview = HtmlFrame(self.preview_frame)
+        self.html_preview.enable_caches(False)
+        self.html_preview.grid(row=1, column=0, sticky="nsew")
+        self.html_preview.grid_remove()
