@@ -19,6 +19,8 @@ from library.citation import (
     options_on_by_default,
 )
 from library.journal_list import JournalMatcher
+from library.resources import get_resource
+import library.crossref as crossref
 
 
 class TkWarnLogger(logging.Handler):
@@ -172,6 +174,10 @@ class FmtGui(ttk.Frame):
             self.journal_matcher = JournalMatcher()
             msg.destroy()
             self.update()
+        if options[Options.CrossrefAPI] and not crossref.ETIQUETTE_EMAIL:
+            logging.warning("CrossRef API asks polite users to provide their email.\n"
+                            "\n"
+                            f"Please put a valid email into {get_resource('crossref_etiquette_email.txt')}")
         try:
             with open(self.input_file.get(), errors="replace") as infile:
                 if options[Options.HtmlFormat]:
@@ -179,8 +185,8 @@ class FmtGui(ttk.Frame):
                         infile, self.preview_dir, options, self.journal_matcher)
                 else:
                     if self.input_has_html_extension():
-                        tkmessagebox.showwarning(
-                            "Warning", "Input might be html file."
+                        logging.warning(
+                            "Input might be html file."
                             " Consider enabling \"HTML format\" option.")
                     process_reference_file(
                         infile, self.preview_dir, options, self.journal_matcher
