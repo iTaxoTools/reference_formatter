@@ -61,7 +61,7 @@ class ListEntry(NamedTuple):
             tag_name = decoration_open_match.group(1)
             decoration_close_match = regex.search(r'</\s*' + tag_name + r'\s*>$', entry)
             if decoration_close_match:
-                entry = entry[:decoration_close_match.start()]
+                entry = entry[:decoration_close_match.start()].strip()
             return ListEntry(decoration_open_match.group(0), entry)
         else:
             return ListEntry(None, entry)
