@@ -5,5 +5,14 @@ The results of formatting are shown in the `Preview` textbox, where they can be 
 
 ## Dependencies
 ```
+ahocorasick_rs
+fuzzywuzzy
+pandas
 regex
+tkinterweb
 ```
+
+## Configuration
+
+Configuration can be changed in the file `data/config.json`:
+* `fuzzy_matching_threshold`: Percentage, above which the titles are considered to be the same, when using fuzzy matching.
