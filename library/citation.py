@@ -10,6 +10,7 @@ from library.utils import *
 from library.journal_list import JournalMatcher, NameForm
 from library.handle_html import ExtractedTags, HTMLList, extract_tags, ListEntry
 from library.positioned import PositionedString
+from library.crossref import doi_from_title
 
 
 class LastSeparator(IntEnum):
@@ -135,6 +136,25 @@ class Style(IntEnum):
         return tags[self][0] + s + tags[self][1]
 
 
+class CrossrefMatch(IntEnum):
+    NotUsed = 0
+    Exact = 1
+    Fuzzy = 2
+
+    def __str__(self) -> str:
+        return [
+            "No DOI retrieval",
+            "Retrieve DOIs by strict title match",
+            "Retrieve DOIs by fuzzy title match",
+        ][self]
+
+    def __bool__(self) -> bool:
+        return self != CrossrefMatch.NotUsed
+
+    def is_fuzzy(self) -> bool:
+        return self == CrossrefMatch.Fuzzy
+
+
 class Options(Enum):
     ProcessAuthorsAndYear = (bool, "Convert authors and year of publication")
     ProcessPageRangeVolume = (bool, "Convert page range and volume/issue number")
@@ -154,6 +174,7 @@ class Options(Enum):
         "Format volume number (and issue number) with:",
     )
     PageRangeSeparator = (PageSeparator, "Use as page range separator")
+    CrossrefAPI = (CrossrefMatch, "Retrieve missing DOIs from Crossref")
     HtmlFormat = (bool, "HTML format")
     SurnameStyle = (Style, "Style authors' surnames")
     JournalStyle = (Style, "Style journal name")
@@ -315,6 +336,8 @@ class Reference(NamedTuple):
     def format_doi(self, options: OptionsDict) -> str:
         if options[Options.RemoveDoi]:
             return ""
+        elif options[Options.CrossrefAPI] and not self.doi:
+            return doi_from_title(self.unparsed[self.article], options[Options.CrossrefAPI].is_fuzzy()) or ""
         else:
             return self.unparsed[self.doi or slice(0, 0)]
 
