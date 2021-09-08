@@ -226,6 +226,8 @@ class ExtractedTags:
             parts.append(html.escape(s[part_start:total_offset + tag_offset]))
             parts.append(tag)
             total_offset += tag_offset
+        if total_offset < 0:
+            return s
         parts.append(s[total_offset:])
         return "".join(parts)
 
