@@ -2,13 +2,19 @@
 
 from typing import Optional
 import logging
+import json
 
 from crossref.restful import Works, Etiquette
 from fuzzywuzzy import fuzz
 
 from library.resources import get_resource
 
-FUZZY_THRESHOLD: int = 97
+with open(get_resource("config.json")) as config_file:
+    try:
+        FUZZY_THRESHOLD: int = json.load(config_file).get(
+            "fuzzy_matching_threshold", 97)
+    except json.JSONDecodeError:
+        FUZZY_THRESHOLD = 97
 
 
 def load_etiquette_email() -> Optional[str]:
