@@ -4,8 +4,11 @@ from typing import Optional
 import logging
 
 from crossref.restful import Works, Etiquette
+from fuzzywuzzy import fuzz
 
 from library.resources import get_resource
+
+FUZZY_THRESHOLD: int = 97
 
 
 def load_etiquette_email() -> Optional[str]:
@@ -32,7 +35,7 @@ else:
     ETIQUETTE = None
 
 
-def doi_from_title(title: str) -> Optional[str]:
+def doi_from_title(title: str, fuzzy: bool) -> Optional[str]:
     if ETIQUETTE:
         endpoint = Works(etiquette=ETIQUETTE)
     else:
@@ -48,9 +51,15 @@ def doi_from_title(title: str) -> Optional[str]:
     except AttributeError:
         return None
     try:
-        if response['title'][0].casefold() == title.casefold():
+        if match_title(response['title'][0], title, fuzzy):
             return response['DOI']
         else:
             return None
     except IndexError:
         return None
+
+
+def match_title(title1: str, title2: str, fuzzy: bool) -> bool:
+    if not fuzzy:
+        return title1.casefold() == title2.casefold()
+    return fuzz.ratio(title1, title2) >= FUZZY_THRESHOLD
