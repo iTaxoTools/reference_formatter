@@ -9,6 +9,7 @@ import tkinter.filedialog as tkfiledialog
 import tkinter.messagebox as tkmessagebox
 from enum import IntEnum
 import os
+from pathlib import Path
 
 from library.citation import (
     Options,
@@ -147,7 +148,8 @@ class FmtGui(ttk.Frame):
         preview_file_path = os.path.join(self.preview_dir, "output")
         with open(preview_file_path) as preview_file:
             self.preview.insert("1.0", preview_file.read())
-        self.html_preview.load_file(preview_file_path, force=True)
+        self.html_preview.load_url(
+            Path(preview_file_path).resolve().as_uri(), force=True)
 
     def switch_preview(self) -> None:
         if self.make_rendered.get():
