@@ -52,7 +52,7 @@ def doi_from_title(title: str, fuzzy: bool) -> Optional[str]:
         return None
     try:
         if match_title(response['title'][0], title, fuzzy):
-            return response['DOI']
+            return "doi:" + response['DOI']
         else:
             return None
     except IndexError:
