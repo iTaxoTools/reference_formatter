@@ -350,17 +350,18 @@ class Reference(NamedTuple):
     def format_article(self, options: OptionsDict, tags: Optional[ExtractedTags]) -> str:
         article = self.unparsed[self.article]
         article_position = self.article.indices(len(self.unparsed))[0]
+        article_dot = "." if not options[Options.ProcessJournalName] else ""
         if not tags:
-            return article
+            return article + article_dot
         else:
-            return tags.insert_tags(article, article_position)
+            return tags.insert_tags(article, article_position) + article_dot
 
     def format_journal(self, options: OptionsDict, tags: ExtractedTags) -> str:
         if self.journal:
             if options[Options.ProcessJournalName]:
                 return self.journal[0].format(options, tags, self.journal[1])
             else:
-                return self.unparsed[self.journal[1]]
+                return " " + self.unparsed[self.journal[1]]
         else:
             return ""
 
@@ -391,7 +392,7 @@ class Reference(NamedTuple):
             return ""
 
     def format_reference(self, options: OptionsDict, tags: Optional[ExtractedTags]):
-        return (
+        return normalize_space(
             self.format_numbering(options)
             + " "
             + self.format_authors(options, tags)
