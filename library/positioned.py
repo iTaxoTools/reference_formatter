@@ -39,7 +39,7 @@ class PositionedString(NamedTuple):
     def is_nonempty(self) -> bool:
         return bool(self.content)
 
-    def slice(self) -> slice:
+    def get_slice(self) -> slice:
         return slice(self.start, self.end)
 
     def strip(self, chars: Optional[str] = None) -> 'PositionedString':
@@ -58,6 +58,9 @@ class PositionedString(NamedTuple):
         if isinstance(pattern, str):
             return regex.search(pattern, self.content)
         return pattern.search(self.content)
+
+    def match_position(self, match: 'regex.Match', group: int = 0) -> slice:
+        return slice(self.start + match.start(group), self.start + match.end(group))
 
     def group(self, match: Optional['regex.Match'], group: int = 0) -> Optional['PositionedString']:
         if not match:

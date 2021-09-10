@@ -248,7 +248,7 @@ def parse_doi(line: PositionedString) -> Tuple[PositionedString, Optional[slice]
     doi_match = line.search(doi_regex)
     if doi_match:
         rest, doi, _ = line.match_partition(doi_match)
-        return rest, doi.slice()
+        return rest, doi.get_slice()
     else:
         return (line, None)
 
@@ -417,7 +417,7 @@ class Reference(NamedTuple):
         numbering_match = s.match(r"\d+\.?\s")
         if numbering_match:
             _, numbering, s = s.match_partition(numbering_match)
-            numbering = numbering.strip().slice()
+            numbering = numbering.strip().get_slice()
             s = s.strip()
         else:
             numbering = None
@@ -437,7 +437,7 @@ class Reference(NamedTuple):
             if not year_match:
                 return None
             authors, year_string, article = s.match_partition(year_match)
-            year = (int(year_match.group(1)), year_string.slice())
+            year = (int(year_match.group(1)), year_string.get_slice())
         authors = authors.strip()
         article = article.strip()
         page_range_regex = regex.compile(
@@ -449,7 +449,7 @@ class Reference(NamedTuple):
             page_range = (
                 page_range_match.group(1).strip(),
                 page_range_match.group(2).strip(),
-                page_range_string.slice()
+                page_range_string.get_slice()
             )
             article = article.strip()
         else:
@@ -462,6 +462,8 @@ class Reference(NamedTuple):
                 journal_name, journal_span = journal_name_tuple
                 extra = article[journal_span.stop:].strip()
                 article = article[:journal_span.start]
+                journal_span = slice(article.start + journal_span.start,
+                                     article.start + journal_span.stop)
                 volume_regex = regex.compile(
                     r"(?<vol>\d+)[,:]|(?<vol>\d+)\s*\((?<issue>\d[^)])\)|vol\S+\s*(?<vol>d+)\s*iss\S+\s*(?<issue>\d+)"
                 )
@@ -477,9 +479,9 @@ class Reference(NamedTuple):
                     journal_volume = (
                         volume_match.group("vol"),
                         volume_match.group("issue"),
-                        slice(volume_match.start(), volume_match.end())
+                        extra.match_position(volume_match)
                     )
-                    extra = extra[volume_match.end():].strip().slice()
+                    extra = extra[volume_match.end():].strip().get_slice()
                     journal = (
                         Journal(journal_name, journal_extra.content),
                         journal_span
@@ -499,16 +501,16 @@ class Reference(NamedTuple):
         try:
             authors_list = (
                 Reference.parse_authors(authors),
-                authors.slice()
+                authors.get_slice()
             )
         except IndexError:  # parts.pop in extract_author
             print("Unexpected name:\n", authors.content)
-            authors_list = (None, authors.slice())
+            authors_list = (None, authors.get_slice())
         return Reference(
             numbering,
             authors_list,
             year,
-            article.slice(),
+            article.get_slice(),
             journal,
             volume,
             extra,
@@ -548,7 +550,7 @@ class Reference(NamedTuple):
         while parts:
             part = parts.pop(0)
             if regex.search("et al", part.content):
-                yield (Author(part.slice()))
+                yield (Author(part.get_slice()))
                 continue
             find_surname = part.search(
                 r"\p{Alpha}[\p{Lower}\'\u2019].*\p{Lower}"
@@ -557,20 +559,20 @@ class Reference(NamedTuple):
                 initials = part.content
                 surname_pos = parts.pop(0)
                 surname = surname_pos.content
-                surname_span = surname_pos.slice()
+                surname_span = surname_pos.get_slice()
             elif find_surname.span() == (0, len(part)):
                 surname = part.content
-                surname_span = part.slice()
+                surname_span = part.get_slice()
                 initials = parts.pop(0).content
             elif find_surname.start() == 0:
                 surname_pos = part.group(find_surname)
                 surname = surname_pos.content
-                surname_span = surname_pos.slice()
+                surname_span = surname_pos.get_slice()
                 initials = part[find_surname.end() + 1:].content
             else:
                 surname_pos = part.group(find_surname)
                 surname = surname_pos.content
-                surname_span = surname_pos.slice()
+                surname_span = surname_pos.get_slice()
                 initials = part[: find_surname.start() - 1].content
             yield (Author(surname_span, surname, initials))
 
