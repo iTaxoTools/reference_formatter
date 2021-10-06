@@ -506,7 +506,7 @@ class Reference(NamedTuple):
             )
         except IndexError:  # parts.pop in extract_author
             print("Unexpected name:\n", authors.content)
-            authors_list = (None, authors.get_slice())
+            return None
         return Reference(
             numbering,
             authors_list,
@@ -624,7 +624,7 @@ def processed_references(html: HTMLList, options: OptionsDict, journal_matcher: 
         ref_text, tags = extract_tags(entry.content)
         ref = Reference.parse(ref_text, journal_matcher)
         if not ref:
-            yield entry
+            yield entry._replace(content=('*' + entry.content))
         else:
             yield entry._replace(content=ref.format_reference(options, tags))
 
