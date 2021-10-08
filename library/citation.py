@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 
 from enum import IntEnum, Enum
-from typing import Dict, List, Optional, Iterator, Any, TextIO, Tuple, Union, Set, NamedTuple
+from typing import (Dict, List, Optional, Iterator, Any,
+                    TextIO, Tuple, Union, Set, NamedTuple)
 import os
 
-import regex
+import regex  # type: ignore
 
 from library.utils import normalize_space
 from library.journal_list import JournalMatcher, NameForm
@@ -17,14 +18,20 @@ from library.journal import Journal
 from library.doi import parse_doi
 
 
+class YearPosition(Enum):
+    Medial = 0
+    Terminal = 1
+
+
 class Reference(NamedTuple):
     numbering: Optional[slice]
     authors: Tuple[Optional[List[Author]], slice]
-    year: Tuple[int, slice]
+    year: Tuple[int, slice, YearPosition]
     article: slice
+    journal_separator: Optional[slice]
     journal: Optional[Tuple[Journal, slice]]
+    volume_separator: Optional[slice]
     volume: Optional[Tuple[str, Optional[str], slice]]
-    extra: slice
     page_range: Optional[Tuple[str, str, slice]]
     doi: Optional[slice]
     unparsed: str
@@ -148,10 +155,9 @@ class Reference(NamedTuple):
     ) -> Optional["Reference"]:
         s = PositionedString.new(line)
         s, doi = parse_doi(s)
-        numbering_match = s.match(r"\d+\.?\s")
+        numbering_match = s.match(r"\d+\.?\s*")
         if numbering_match:
             _, numbering, s = s.match_partition(numbering_match)
-            numbering = numbering.strip().get_slice()
             s = s.strip()
         else:
             numbering = None
@@ -165,13 +171,15 @@ class Reference(NamedTuple):
             else:
                 return None
             year = (int(terminal_year_match.group(1)), slice(
-                terminal_year_match.start(), terminal_year_match.end()))
+                terminal_year_match.start(), terminal_year_match.end()),
+                YearPosition.Terminal)
         else:
             year_match = s.search(r"\(?(\d+)\)?\S?")
             if not year_match:
                 return None
             authors, year_string, article = s.match_partition(year_match)
-            year = (int(year_match.group(1)), year_string.get_slice())
+            year = (int(year_match.group(1)),
+                    year_string.get_slice(), YearPosition.Medial)
         authors = authors.strip()
         article = article.strip()
         page_range_regex = regex.compile(
@@ -196,6 +204,9 @@ class Reference(NamedTuple):
                 journal_name, journal_span = journal_name_tuple
                 extra = article[journal_span.stop:].strip()
                 article = article[:journal_span.start]
+                journal_separator_match = article.search(r"\W*$")
+                article, _, _ = article.match_partition(journal_separator_match)
+                journal_separator = article.match_position(journal_separator_match)
                 journal_span = slice(article.start + journal_span.start,
                                      article.start + journal_span.stop)
                 volume_regex = regex.compile(
@@ -204,12 +215,13 @@ class Reference(NamedTuple):
                 volume_match = extra.search(volume_regex)
                 if not volume_match:
                     journal = (
-                        Journal(journal_name, None),
+                        Journal(journal_name),
                         journal_span
                     )
                     volume = None
+                    volume_separator = None
                 else:
-                    journal_extra = extra[: volume_match.start()].strip()
+                    volume_separator = extra[: volume_match.start()].slice()
                     journal_volume = (
                         volume_match.group("vol"),
                         volume_match.group("issue"),
@@ -217,21 +229,21 @@ class Reference(NamedTuple):
                     )
                     extra = extra[volume_match.end():].strip().get_slice()
                     journal = (
-                        Journal(journal_name, journal_extra.content),
+                        Journal(journal_name),
                         journal_span
                     )
                     volume = journal_volume
                 article = article.strip()
-                if article and regex.match(r"\p{Punct}", article[-1].content):
-                    article = article[:-1]
             else:
+                journal_separator = None
                 journal = None
+                volume_separator = None
                 volume = None
-                extra = slice(0, 0)
         else:
+            journal_separator = None
             journal = None
+            volume_separator = None
             volume = None
-            extra = slice(0, 0)
         try:
             authors_list = (
                 Reference.parse_authors(authors),
@@ -245,9 +257,10 @@ class Reference(NamedTuple):
             authors_list,
             year,
             article.get_slice(),
+            journal_separator,
             journal,
+            volume_separator,
             volume,
-            extra,
             page_range,
             doi,
             line
