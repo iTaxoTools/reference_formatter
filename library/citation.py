@@ -7,7 +7,7 @@ import os
 
 import regex  # type: ignore
 
-from library.utils import normalize_space
+from library.utils import normalize_space, replace_slice
 from library.journal_list import JournalMatcher, NameForm
 from library.handle_html import ExtractedTags, HTMLList, extract_tags, ListEntry
 from library.positioned import PositionedString
@@ -41,10 +41,11 @@ class Reference(NamedTuple):
         end = start + len(doi)
         self._replace(unparsed=(self.unparsed + doi), doi=slice(start, end))
 
-    def format_authors(self, options: OptionsDict, tags: ExtractedTags) -> str:
+    def format_authors(self, options: OptionsDict, tags: ExtractedTags,
+                       input: str) -> str:
         authors, authors_span = self.authors
-        if (not options[Options.ProcessAuthorsAndYear]) or not authors:
-            return self.unparsed[authors_span]
+        if not authors:
+            return input
         formatted_authors = (
             author.format_author(options, i == 0, tags)
             for i, author in enumerate(authors)
@@ -58,111 +59,172 @@ class Reference(NamedTuple):
         else:
             end_sep = ""
         if not authors_str:
-            return last_author + end_sep
+            replacement = last_author + end_sep
         else:
-            return (
+            replacement = (
                 ", ".join(authors_str)
                 + str(options[Options.LastNameSep])
                 + last_author
                 + end_sep
             )
+        return replace_slice(input, authors_span, replacement)
 
-    def format_numbering(self, options: OptionsDict) -> str:
-        if options[Options.KeepNumbering] and self.numbering:
-            return self.unparsed[self.numbering]
+    def format_numbering(self, options: OptionsDict, input: str) -> str:
+        if not options[Options.KeepNumbering] and self.numbering:
+            return replace_slice(input, self.numbering, "")
         else:
-            return ""
+            return input
 
-    def format_doi(self, options: OptionsDict) -> str:
+    def format_doi(self, options: OptionsDict, input: str) -> str:
         if options[Options.RemoveDoi]:
-            return ""
+            if self.doi:
+                return replace_slice(input, self.doi, "")
+            else:
+                return input
         elif options[Options.CrossrefAPI] and not self.doi:
-            return doi_from_title(self.unparsed[self.article],
-                                  options[Options.CrossrefAPI].is_fuzzy())\
-                or ""
+            retrieved_doi = doi_from_title(self.unparsed[self.article],
+                                           options[Options.CrossrefAPI].is_fuzzy())
+            if retrieved_doi:
+                return input + " " + retrieved_doi
+            else:
+                return input
         else:
-            return self.unparsed[self.doi or slice(0, 0)]
+            return input
 
-    def format_year(self, options: OptionsDict) -> str:
-        if options[Options.ProcessAuthorsAndYear]:
-            return options[Options.YearFormat].format_year(self.year[0])
+    def format_terminal_year(self, options: OptionsDict, input: str) -> str:
+        if self.year[2] == YearPosition.Terminal:
+            return replace_slice(input, self.year[1], "")
         else:
-            return self.unparsed[self.year[1]]
+            return input
+
+    def year_gap(self) -> slice:
+        _, authors_slice = self.authors
+        _, authors_stop, _ = authors_slice.indices(len(self.unparsed))
+        article_start, _, _ = self.article.indices(len(self.unparsed))
+        return slice(authors_stop, article_start)
+
+    def format_year(self, options: OptionsDict, input: str) -> str:
+        year, span, year_position = self.year
+        if year_position == YearPosition.Terminal:
+            span = self.year_gap()
+        formatted_year = options[Options.YearFormat].format_year(self.year[0])
+        return replace_slice(input, span, formatted_year + " ")
 
     def format_article(self, options: OptionsDict,
-                       tags: Optional[ExtractedTags]) -> str:
+                       tags: Optional[ExtractedTags], input: str) -> str:
         article = self.unparsed[self.article]
         article_position = self.article.indices(len(self.unparsed))[0]
-        article_dot = "." if not options[Options.ProcessJournalName] else ""
         if not tags:
-            return article + article_dot
+            return input
         else:
-            return tags.insert_tags(article, article_position) + article_dot
+            return replace_slice(input, self.article,
+                                 tags.insert_tags(article, article_position))
 
-    def format_journal(self, options: OptionsDict, tags: ExtractedTags) -> str:
+    def format_journal(self, options: OptionsDict, tags: ExtractedTags,
+                       input: str) -> str:
         if self.journal:
-            if options[Options.ProcessJournalName]:
-                return self.journal[0].format(options, tags, self.journal[1])
-            else:
-                return " " + self.unparsed[self.journal[1]]
+            journal, span = self.journal
+            return replace_slice(input, span, journal.format(options, tags, span))
         else:
-            return ""
+            return input
 
-    def format_volume(self, options: OptionsDict) -> str:
+    def format_journal_separator(self, options: OptionsDict, input: str) -> str:
+        if self.journal_separator:
+            return replace_slice(input, self.journal_separator,
+                                 options[Options.JournalSeparator].format() + " ")
+        else:
+            return input
+
+    def format_volume_separator(self, options: OptionsDict, input: str) -> str:
+        if self.volume_separator:
+            return replace_slice(input, self.volume_separator,
+                                 options[Options.VolumeSeparator].format())
+        else:
+            return input
+
+    def format_volume(self, options: OptionsDict, input: str) -> str:
         if not self.volume:
-            return ""
-        if not options[Options.ProcessPageRangeVolume]:
-            return self.unparsed[self.volume[2]]
+            return input
         volume, issue, span = self.volume
         formatted_issue = f" ({issue})" if issue else ""
         formatted_volume = (
             volume
-            + (formatted_issue if options[Options.RemoveIssue] else "")
+            + ("" if options[Options.RemoveIssue] else formatted_issue)
             + options[Options.VolumeFormatting].format()
         )
         if options[Options.HtmlFormat]\
                 and options[Options.VolumeStyle] != Style.Preserve:
             formatted_volume = options[Options.VolumeStyle].style(formatted_volume)
-        return formatted_volume
+        return replace_slice(input, span, formatted_volume)
 
-    def format_page_range(self, options: OptionsDict) -> str:
+    def format_page_range(self, options: OptionsDict, input: str) -> str:
         if self.page_range:
             page_start, page_end, slice = self.page_range
-            if options[Options.ProcessPageRangeVolume]:
-                return options[Options.PageRangeSeparator]\
-                    .format_range((page_start, page_end))
-            else:
-                return self.unparsed[slice]
+            formatted_range = options[Options.PageRangeSeparator]\
+                .format_range((page_start, page_end))
+            return replace_slice(input, slice, formatted_range)
         else:
-            return ""
+            return input
+
+    def assert_parts_order(self):
+        """
+        asserts that all parts of the reference are in the expected order
+        """
+        slices: List[slice] = []
+        if self.numbering:
+            slices.append(self.numbering)
+        slices.append(self.authors[1])
+        if self.year[2] == YearPosition.Medial:
+            slices.append(self.year[1])
+        slices.append(self.article)
+        if self.journal_separator:
+            slices.append(self.journal_separator)
+        if self.journal:
+            slices.append(self.journal[1])
+        if self.volume_separator:
+            slices.append(self.volume_separator)
+        if self.volume:
+            slices.append(self.volume[2])
+        if self.page_range:
+            slices.append(self.page_range[2])
+        if self.year[2] == YearPosition.Terminal:
+            slices.append(self.year[1])
+        if self.doi:
+            slices.append(self.doi)
+        for i in range(len(slices) - 1):
+            assert slices[i].stop <= slices[i + 1].start
 
     def format_reference(self, options: OptionsDict, tags: Optional[ExtractedTags]):
+        self.assert_parts_order()
+        formatted_reference = self.unparsed
+        formatted_reference = self.format_doi(options, formatted_reference)
+        formatted_reference = self.format_terminal_year(options, formatted_reference)
+        formatted_reference = self.format_page_range(options, formatted_reference)
+        formatted_reference = self.format_volume(options, formatted_reference)
+        formatted_reference = self.format_volume_separator(options, formatted_reference)
+        formatted_reference = self.format_journal(options, tags, formatted_reference)
+        formatted_reference = self.format_journal_separator(
+            options, formatted_reference)
+        formatted_reference = self.format_article(options, tags, formatted_reference)
+        formatted_reference = self.format_year(options, formatted_reference)
+        formatted_reference = self.format_authors(options, tags, formatted_reference)
+        formatted_reference = self.format_numbering(options, formatted_reference)
         return normalize_space(
-            self.format_numbering(options)
-            + " "
-            + self.format_authors(options, tags)
-            + " "
-            + self.format_year(options)
-            + " "
-            + self.format_article(options, tags)
-            + self.format_journal(options, tags)
-            + " "
-            + self.format_volume(options)
-            + " "
-            + self.format_page_range(options)
-            + " "
-            + self.format_doi(options)
+            formatted_reference
         ).strip()
 
-    @staticmethod
+    @ staticmethod
     def parse(
         line: str, journal_matcher: Optional[JournalMatcher]
     ) -> Optional["Reference"]:
+        if "Fossil" in line:
+            breakpoint()
         s = PositionedString.new(line)
         s, doi = parse_doi(s)
         numbering_match = s.match(r"\d+\.?\s*")
         if numbering_match:
-            _, numbering, s = s.match_partition(numbering_match)
+            _, numbering_str, s = s.match_partition(numbering_match)
+            numbering = numbering_str.get_slice()
             s = s.strip()
         else:
             numbering = None
@@ -175,9 +237,9 @@ class Reference(NamedTuple):
                 authors, article = authors_article
             else:
                 return None
-            year = (int(terminal_year_match.group(1)), slice(
-                terminal_year_match.start(), terminal_year_match.end()),
-                YearPosition.Terminal)
+            year = (int(terminal_year_match.group(1)),
+                    s.match_position(terminal_year_match),
+                    YearPosition.Terminal)
         else:
             year_match = s.search(r"\(?(\d+)\)?\S?")
             if not year_match:
@@ -228,7 +290,7 @@ class Reference(NamedTuple):
                     volume = None
                     volume_separator = None
                 else:
-                    volume_separator = extra[: volume_match.start()].slice()
+                    volume_separator = extra[: volume_match.start()].get_slice()
                     journal_volume = (
                         volume_match.group("vol"),
                         volume_match.group("issue"),

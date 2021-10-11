@@ -63,7 +63,7 @@ class VolumeSeparator(IntEnum):
     Semicolon = 3
 
     def __str__(self) -> str:
-        return ["", ".", ",", ";"][self]
+        return [" ", ".", ",", ";"][self]
 
     def format(self) -> str:
         return str(self)
