@@ -42,15 +42,16 @@ class YearFormat(IntEnum):
 
 
 class JournalSeparator(IntEnum):
-    Period = 0
-    Comma = 1
-    PeriodMinus = 2
-    PeriodNDash = 3
-    CommaMinus = 4
-    CommaNDash = 5
+    Unchanged = 0
+    Period = 1
+    Comma = 2
+    PeriodMinus = 3
+    PeriodNDash = 4
+    CommaMinus = 5
+    CommaNDash = 6
 
     def __str__(self) -> str:
-        return [".", ",", ".-", ".–", ",-", ",–"][self]
+        return ["Leave unchanged", ".", ",", ".-", ".–", ",-", ",–"][self]
 
     def format(self) -> str:
         return str(self)

@@ -12,7 +12,7 @@ from library.journal_list import JournalMatcher, NameForm
 from library.handle_html import ExtractedTags, HTMLList, extract_tags, ListEntry
 from library.positioned import PositionedString
 from library.crossref import doi_from_title
-from library.options import OptionsDict, Options, Style, LastSeparator
+from library.options import OptionsDict, Options, Style, LastSeparator, JournalSeparator
 from library.author import Author
 from library.journal import Journal
 from library.doi import parse_doi
@@ -129,7 +129,7 @@ class Reference(NamedTuple):
             return input
 
     def format_journal_separator(self, options: OptionsDict, input: str) -> str:
-        if self.journal_separator:
+        if self.journal_separator and options[Options.JournalSeparator] != JournalSeparator.Unchanged:
             return replace_slice(input, self.journal_separator,
                                  options[Options.JournalSeparator].format() + " ")
         else:
