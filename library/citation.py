@@ -77,7 +77,9 @@ class Reference(NamedTuple):
         if options[Options.RemoveDoi]:
             return ""
         elif options[Options.CrossrefAPI] and not self.doi:
-            return doi_from_title(self.unparsed[self.article], options[Options.CrossrefAPI].is_fuzzy()) or ""
+            return doi_from_title(self.unparsed[self.article],
+                                  options[Options.CrossrefAPI].is_fuzzy())\
+                or ""
         else:
             return self.unparsed[self.doi or slice(0, 0)]
 
@@ -87,7 +89,8 @@ class Reference(NamedTuple):
         else:
             return self.unparsed[self.year[1]]
 
-    def format_article(self, options: OptionsDict, tags: Optional[ExtractedTags]) -> str:
+    def format_article(self, options: OptionsDict,
+                       tags: Optional[ExtractedTags]) -> str:
         article = self.unparsed[self.article]
         article_position = self.article.indices(len(self.unparsed))[0]
         article_dot = "." if not options[Options.ProcessJournalName] else ""
@@ -117,7 +120,8 @@ class Reference(NamedTuple):
             + (formatted_issue if options[Options.RemoveIssue] else "")
             + options[Options.VolumeFormatting].format()
         )
-        if options[Options.HtmlFormat] and options[Options.VolumeStyle] != Style.Preserve:
+        if options[Options.HtmlFormat]\
+                and options[Options.VolumeStyle] != Style.Preserve:
             formatted_volume = options[Options.VolumeStyle].style(formatted_volume)
         return formatted_volume
 
@@ -125,7 +129,8 @@ class Reference(NamedTuple):
         if self.page_range:
             page_start, page_end, slice = self.page_range
             if options[Options.ProcessPageRangeVolume]:
-                return options[Options.PageRangeSeparator].format_range((page_start, page_end))
+                return options[Options.PageRangeSeparator]\
+                    .format_range((page_start, page_end))
             else:
                 return self.unparsed[slice]
         else:
@@ -188,7 +193,7 @@ class Reference(NamedTuple):
         page_range_match = article.search(page_range_regex)
         if page_range_match:
             article, page_range_string, _ = article.match_partition(page_range_match)
-            page_range = (
+            page_range: Optional[Tuple[str, str, slice]] = (
                 page_range_match.group(1).strip(),
                 page_range_match.group(2).strip(),
                 page_range_string.get_slice()
@@ -210,14 +215,16 @@ class Reference(NamedTuple):
                 journal_span = slice(article.start + journal_span.start,
                                      article.start + journal_span.stop)
                 volume_regex = regex.compile(
-                    r"(?<vol>\d+)[,:]|(?<vol>\d+)\s*\((?<issue>\d[^)])\)|vol\S+\s*(?<vol>d+)\s*iss\S+\s*(?<issue>\d+)"
+                    r"(?<vol>\d+)[,:]|"
+                    r"(?<vol>\d+)\s*\((?<issue>\d[^)])\)|"
+                    r"vol\S+\s*(?<vol>d+)\s*iss\S+\s*(?<issue>\d+)"
                 )
                 volume_match = extra.search(volume_regex)
+                journal: Optional[Tuple[Journal, slice]] = (
+                    Journal(journal_name),
+                    journal_span
+                )
                 if not volume_match:
-                    journal = (
-                        Journal(journal_name),
-                        journal_span
-                    )
                     volume = None
                     volume_separator = None
                 else:
@@ -226,11 +233,6 @@ class Reference(NamedTuple):
                         volume_match.group("vol"),
                         volume_match.group("issue"),
                         extra.match_position(volume_match)
-                    )
-                    extra = extra[volume_match.end():].strip().get_slice()
-                    journal = (
-                        Journal(journal_name),
-                        journal_span
                     )
                     volume = journal_volume
                 article = article.strip()
@@ -267,9 +269,12 @@ class Reference(NamedTuple):
         )
 
     @ staticmethod
-    def split_three_words(s: PositionedString) -> Optional[Tuple[PositionedString, PositionedString]]:
+    def split_three_words(s: PositionedString) ->\
+            Optional[Tuple[PositionedString, PositionedString]]:
         three_words_regex = regex.compile(
-            r"[^\s.]*[[:lower:]][^\s.]*\s+[^\s.]*[[:lower:]][^\s.]*\s+[^\s.]*[[:lower:]][^\s.]*"
+            r"[^\s.]*[[:lower:]][^\s.]*\s+"
+            r"[^\s.]*[[:lower:]][^\s.]*\s+"
+            r"[^\s.]*[[:lower:]][^\s.]*"
         )
         three_words_match = s.search(three_words_regex)
         if three_words_regex:
@@ -280,7 +285,8 @@ class Reference(NamedTuple):
     @ staticmethod
     def parse_authors(s: PositionedString) -> List[Author]:
         # try to separate the last author
-        # after the loop parts_rest and last_part will be comma-separated lists of surnames and initials
+        # after the loop parts_rest and last_part will be comma-separated lists
+        # of surnames and initials
         for lastsep in map(str, reversed(list(LastSeparator))):
             parts_rest, sep, last_part = s.partition(lastsep)
             if sep.is_nonempty():
@@ -365,7 +371,9 @@ def process_reference_file(
             print(prev_reference.format_reference(options, None), file=outfile)
 
 
-def processed_references(html: HTMLList, options: OptionsDict, journal_matcher: Optional[JournalMatcher]) -> Iterator[ListEntry]:
+def processed_references(html: HTMLList, options: OptionsDict,
+                         journal_matcher: Optional[JournalMatcher])\
+        -> Iterator[ListEntry]:
     for entry in html:
         ref_text, tags = extract_tags(entry.content)
         ref = Reference.parse(ref_text, journal_matcher)
@@ -383,5 +391,7 @@ def process_reference_html(
 ):
     with open(os.path.join(output_dir, "output"), mode="w") as outfile:
         html = HTMLList(input.read())
-        for chunk in html.assemble_html(processed_references(html, options, journal_matcher)):
+        for chunk in html.assemble_html(processed_references(html,
+                                                             options,
+                                                             journal_matcher)):
             print(chunk, file=outfile)
