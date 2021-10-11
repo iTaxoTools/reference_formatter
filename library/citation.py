@@ -198,16 +198,24 @@ class Reference(NamedTuple):
         self.assert_parts_order()
         formatted_reference = self.unparsed
         formatted_reference = self.format_doi(options, formatted_reference)
-        formatted_reference = self.format_terminal_year(options, formatted_reference)
-        formatted_reference = self.format_page_range(options, formatted_reference)
-        formatted_reference = self.format_volume(options, formatted_reference)
-        formatted_reference = self.format_volume_separator(options, formatted_reference)
-        formatted_reference = self.format_journal(options, tags, formatted_reference)
-        formatted_reference = self.format_journal_separator(
-            options, formatted_reference)
+        if options[Options.ProcessAuthorsAndYear]:
+            formatted_reference = self.format_terminal_year(
+                options, formatted_reference)
+        if options[Options.ProcessPageRangeVolume]:
+            formatted_reference = self.format_page_range(options, formatted_reference)
+            formatted_reference = self.format_volume(options, formatted_reference)
+            formatted_reference = self.format_volume_separator(
+                options, formatted_reference)
+        if options[Options.ProcessJournalName]:
+            formatted_reference = self.format_journal(options, tags,
+                                                      formatted_reference)
+            formatted_reference = self.format_journal_separator(
+                options, formatted_reference)
         formatted_reference = self.format_article(options, tags, formatted_reference)
-        formatted_reference = self.format_year(options, formatted_reference)
-        formatted_reference = self.format_authors(options, tags, formatted_reference)
+        if options[Options.ProcessAuthorsAndYear]:
+            formatted_reference = self.format_year(options, formatted_reference)
+            formatted_reference = self.format_authors(options, tags,
+                                                      formatted_reference)
         formatted_reference = self.format_numbering(options, formatted_reference)
         return normalize_space(
             formatted_reference
