@@ -12,10 +12,12 @@ import os
 from pathlib import Path
 
 from library.citation import (
-    Options,
-    OptionsDict,
     process_reference_file,
     process_reference_html,
+)
+from library.options import (
+    Options,
+    OptionsDict,
     options_on_by_default,
 )
 from library.journal_list import JournalMatcher
