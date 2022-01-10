@@ -151,7 +151,7 @@ class FmtGui(ttk.Frame):
     def create_top_frame(self) -> None:
         self.top_frame = ttk.Frame(self)
         self.top_frame.rowconfigure(0, weight=1)
-        self.top_frame.columnconfigure(3, weight=1)
+        self.top_frame.columnconfigure(4, weight=1)
 
         ttk.Button(self.top_frame, text="Open", command=self.open_command).grid(
             row=0, column=0
@@ -164,6 +164,9 @@ class FmtGui(ttk.Frame):
         ttk.Button(
             self.top_frame, text="Run", command=self.run_command, style="Run.TButton"
         ).grid(row=0, column=2)
+        ttk.Button(self.top_frame, text="Clear", command=self.clear_command).grid(
+            row=0, column=3
+        )
 
     def clear_command(self) -> None:
         self.preview.delete("1.0", "end")
