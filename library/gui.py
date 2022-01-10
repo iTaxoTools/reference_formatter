@@ -7,6 +7,7 @@ import tkinter as tk
 import tkinter.ttk as ttk
 import tkinter.filedialog as tkfiledialog
 import tkinter.messagebox as tkmessagebox
+import tkinter.font as tkfont
 from enum import IntEnum
 import os
 from pathlib import Path
@@ -103,25 +104,27 @@ class FmtGui(ttk.Frame):
         self.preview_dir = kwargs.pop("preview_dir")
         self.journal_matcher: Optional[JournalMatcher] = None
         super().__init__(*args, **kwargs)
+        self.create_banner()
         self.create_top_frame()
         self.parameters_frame = FmtParameters(self, text="Parameters")
         self.create_preview_frame()
 
-        self.top_frame.grid(row=0, column=0, sticky="nwse", columnspan=2)
+        self.banner.grid(row=0, column=0, sticky="nwse", columnspan=2)
+        self.top_frame.grid(row=1, column=0, sticky="nwse", columnspan=2)
 
         ttk.Label(self, text="Input file").grid(
-            row=1, column=0, sticky="w", columnspan=2
+            row=2, column=0, sticky="w", columnspan=2
         )
 
         self.input_file = tk.StringVar()
         ttk.Entry(self, textvariable=self.input_file).grid(
-            row=2, column=0, sticky="we", columnspan=2
+            row=3, column=0, sticky="we", columnspan=2
         )
 
-        self.parameters_frame.grid(row=3, column=0, sticky="nsew")
-        self.preview_frame.grid(row=3, column=1, sticky="nsew")
+        self.parameters_frame.grid(row=4, column=0, sticky="nsew")
+        self.preview_frame.grid(row=4, column=1, sticky="nsew")
 
-        self.rowconfigure(3, weight=1)
+        self.rowconfigure(4, weight=1)
         self.columnconfigure(1, weight=1)
 
         self.grid(sticky="nsew")
@@ -129,6 +132,21 @@ class FmtGui(ttk.Frame):
         logger.addHandler(TkWarnLogger())
         logger.addHandler(TkErrorLogger())
         logger.setLevel(logging.WARNING)
+
+    def create_banner(self) -> None:
+        self.banner = ttk.Frame(self)
+        ttk.Separator(self.banner, orient="horizontal").pack(side=tk.BOTTOM, fill=tk.X)
+        ttk.Label(
+            self.banner, text="reference-formatter", font=tkfont.Font(size=20)
+        ).pack(side=tk.LEFT)
+
+        self.logo = tk.PhotoImage(
+            file=get_resource("iTaxoTools Digital linneaeus MICROLOGO.png")
+        )
+
+        ttk.Label(self.banner, image=self.logo).pack(side=tk.RIGHT, fill=tk.Y)
+
+        ttk.Separator(self.banner, orient="vertical").pack(side=tk.RIGHT, fill=tk.Y)
 
     def create_top_frame(self) -> None:
         self.top_frame = ttk.Frame(self)
@@ -141,9 +159,11 @@ class FmtGui(ttk.Frame):
         ttk.Button(self.top_frame, text="Save", command=self.save_command).grid(
             row=0, column=1
         )
-        ttk.Button(self.top_frame, text="Run", command=self.run_command).grid(
-            row=0, column=2
-        )
+        ttk_style = ttk.Style()
+        ttk_style.configure("Run.TButton", background="blue")
+        ttk.Button(
+            self.top_frame, text="Run", command=self.run_command, style="Run.TButton"
+        ).grid(row=0, column=2)
 
     def clear_command(self) -> None:
         self.preview.delete("1.0", "end")
