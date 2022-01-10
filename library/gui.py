@@ -16,9 +16,11 @@ from library.citation import (
     process_reference_html,
 )
 from library.options import (
+    OptionGroup,
     Options,
     OptionsDict,
     options_on_by_default,
+    primary_options,
 )
 from library.journal_list import JournalMatcher
 from library.resources import get_resource
@@ -55,27 +57,36 @@ class FmtParameters(ttk.LabelFrame):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.get_options: Dict[Options, Union[tk.Variable, ttk.Combobox]] = {}
-        row = 0
+        self.group_frames: Dict[OptionGroup, ttk.LabelFrame] = {
+            group: ttk.LabelFrame(self, text=str(group), relief="sunken")
+            for group in list(OptionGroup)
+        }
         for option in list(Options):
+            group_frame = self.group_frames[option.option_group()]
             if option.type is bool:
                 var = tk.BooleanVar(self, value=option in options_on_by_default)
                 self.get_options[option] = var
-                ttk.Checkbutton(self, text=option.description, variable=var).grid(
-                    row=row, column=0, sticky="w", columnspan=2
+                check = ttk.Checkbutton(
+                    group_frame, text=option.description, variable=var
                 )
+                if option in primary_options:
+                    group_frame.configure(labelwidget=check)
+                else:
+                    check.pack(side=tk.TOP, fill=tk.X)
             elif issubclass(option.type, IntEnum):
-                ttk.Label(self, text=option.description).grid(
-                    row=row, column=0, sticky="w"
-                )
+                option_frame = ttk.Frame(group_frame)
+                ttk.Label(option_frame, text=option.description).pack(side=tk.LEFT)
                 cmbox = ttk.Combobox(
-                    self, state="readonly", values=list(map(str, list(option.type)))
+                    option_frame,
+                    state="readonly",
+                    values=list(map(str, list(option.type))),
                 )
                 cmbox.current(0)
-                cmbox.grid(row=row, column=1, sticky="w")
+                cmbox.pack(side=tk.LEFT, fill=tk.X)
                 self.get_options[option] = cmbox
-            row += 1
-        self.rowconfigure(row, weight=1)
-        self.columnconfigure(1, weight=1)
+                option_frame.pack(side=tk.TOP, fill=tk.X)
+            for _, group_frame in self.group_frames.items():
+                group_frame.pack(side=tk.TOP, fill=tk.X)
 
     def get(self) -> OptionsDict:
         result: OptionsDict = {}
@@ -153,7 +164,8 @@ class FmtGui(ttk.Frame):
         with open(preview_file_path) as preview_file:
             self.preview.insert("1.0", preview_file.read())
         self.html_preview.load_url(
-            Path(preview_file_path).resolve().as_uri(), force=True)
+            Path(preview_file_path).resolve().as_uri(), force=True
+        )
 
     def switch_preview(self) -> None:
         if self.make_rendered.get():
@@ -168,7 +180,7 @@ class FmtGui(ttk.Frame):
         options = self.parameters_frame.get()
         if options[Options.ProcessJournalName] and not self.journal_matcher:
             msg = tk.Toplevel(self)
-            if self.tk.call('tk', 'windowingsystem') == 'x11':
+            if self.tk.call("tk", "windowingsystem") == "x11":
                 msg.attributes("-type", "splash")
             msg.title("Please wait")
             ttk.Label(msg, text="Loading journals' names").grid()
@@ -177,19 +189,23 @@ class FmtGui(ttk.Frame):
             msg.destroy()
             self.update()
         if options[Options.CrossrefAPI] and not crossref.ETIQUETTE_EMAIL:
-            logging.warning("CrossRef API asks polite users to provide their email.\n"
-                            "\n"
-                            f"Please put a valid email into {get_resource('crossref_etiquette_email.txt')}")
+            logging.warning(
+                "CrossRef API asks polite users to provide their email.\n"
+                "\n"
+                f"Please put a valid email into {get_resource('crossref_etiquette_email.txt')}"
+            )
         try:
             with open(self.input_file.get(), errors="replace") as infile:
                 if options[Options.HtmlFormat]:
                     process_reference_html(
-                        infile, self.preview_dir, options, self.journal_matcher)
+                        infile, self.preview_dir, options, self.journal_matcher
+                    )
                 else:
                     if self.input_has_html_extension():
                         logging.warning(
                             "Input might be html file."
-                            " Consider enabling \"HTML format\" option.")
+                            ' Consider enabling "HTML format" option.'
+                        )
                     process_reference_file(
                         infile, self.preview_dir, options, self.journal_matcher
                     )
@@ -211,8 +227,12 @@ class FmtGui(ttk.Frame):
         self.preview_frame.columnconfigure(0, weight=1)
 
         self.make_rendered = tk.BooleanVar(value=False)
-        ttk.Checkbutton(self.preview_frame, text="Preview rendered", variable=self.make_rendered, command=self.switch_preview).grid(
-            row=0, column=0, sticky="w")
+        ttk.Checkbutton(
+            self.preview_frame,
+            text="Preview rendered",
+            variable=self.make_rendered,
+            command=self.switch_preview,
+        ).grid(row=0, column=0, sticky="w")
 
         self.plain_preview = ttk.Frame(self.preview_frame)
         self.plain_preview.rowconfigure(0, weight=1)
