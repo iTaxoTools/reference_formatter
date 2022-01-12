@@ -112,13 +112,7 @@ class Style(IntEnum):
     SmallCaps = 4
 
     def __str__(self) -> str:
-        return [
-            "preserve",
-            "normal",
-            "italics",
-            "bold",
-            "small caps"
-        ][self]
+        return ["preserve", "normal", "italics", "bold", "small caps"][self]
 
     def style(self, s: str) -> str:
         tags = [
@@ -126,7 +120,7 @@ class Style(IntEnum):
             ("", ""),
             ("<i>", "</i>"),
             ("<b>", "</b>"),
-            ("<span style=\"font-variant: small-caps\">", "</span>")
+            ('<span style="font-variant: small-caps">', "</span>"),
         ]
         return tags[self][0] + s + tags[self][1]
 
@@ -150,18 +144,30 @@ class CrossrefMatch(IntEnum):
         return self == CrossrefMatch.Fuzzy
 
 
+class OptionGroup(Enum):
+    AuthorsAndYear = 0
+    PageRangeAndVolume = 1
+    JournalName = 2
+    HTML = 3
+    Other = 4
+
+    def __str__(self) -> str:
+        return {
+            OptionGroup.AuthorsAndYear: "",
+            OptionGroup.PageRangeAndVolume: "",
+            OptionGroup.JournalName: "",
+            OptionGroup.HTML: "HTML options",
+            OptionGroup.Other: "Other conversions",
+        }[self]
+
+
 class Options(Enum):
     ProcessAuthorsAndYear = (bool, "Convert authors and year of publication")
-    ProcessPageRangeVolume = (bool, "Convert page range and volume/issue number")
-    ProcessJournalName = (bool, "Convert journal name")
     InitialsBefore = (bool, "Place initials before surname (except first name)")
     InitialsNoPeriod = (bool, "Write initials without abbreviating period")
-    KeepNumbering = (bool, "Keep numbering of references")
-    RemoveDoi = (bool, "Remove doi")
     LastNameSep = (LastSeparator, "Precede last name with:")
     YearFormat = (YearFormat, "Format year as:")
-    JournalSeparator = (JournalSeparator, "Separate Journal name with:")
-    JournalNameForm = (NameForm, "Represent journal name as:")
+    ProcessPageRangeVolume = (bool, "Convert page range and volume/issue number")
     VolumeSeparator = (VolumeSeparator, "Separate volume number with:")
     RemoveIssue = (bool, "Remove issue number")
     VolumeFormatting = (
@@ -169,18 +175,53 @@ class Options(Enum):
         "Format volume number (and issue number) with:",
     )
     PageRangeSeparator = (PageSeparator, "Use as page range separator")
-    CrossrefAPI = (CrossrefMatch, "Retrieve missing DOIs from Crossref")
+    ProcessJournalName = (bool, "Convert journal name")
+    JournalSeparator = (JournalSeparator, "Separate Journal name with:")
+    JournalNameForm = (NameForm, "Represent journal name as:")
     HtmlFormat = (bool, "HTML format")
     SurnameStyle = (Style, "Style authors' surnames")
     JournalStyle = (Style, "Style journal name")
     VolumeStyle = (Style, "Style volume number")
+    KeepNumbering = (bool, "Keep numbering of references")
+    RemoveDoi = (bool, "Remove doi")
+    CrossrefAPI = (CrossrefMatch, "Retrieve missing DOIs from Crossref")
 
     def __init__(self, type: type, description: str):
         self.type = type
         self.description = description
 
+    def option_group(self) -> OptionGroup:
+        return {
+            Options.ProcessAuthorsAndYear: OptionGroup.AuthorsAndYear,
+            Options.InitialsBefore: OptionGroup.AuthorsAndYear,
+            Options.InitialsNoPeriod: OptionGroup.AuthorsAndYear,
+            Options.LastNameSep: OptionGroup.AuthorsAndYear,
+            Options.YearFormat: OptionGroup.AuthorsAndYear,
+            Options.ProcessPageRangeVolume: OptionGroup.PageRangeAndVolume,
+            Options.VolumeSeparator: OptionGroup.PageRangeAndVolume,
+            Options.RemoveIssue: OptionGroup.PageRangeAndVolume,
+            Options.VolumeFormatting: OptionGroup.PageRangeAndVolume,
+            Options.PageRangeSeparator: OptionGroup.PageRangeAndVolume,
+            Options.ProcessJournalName: OptionGroup.JournalName,
+            Options.JournalSeparator: OptionGroup.JournalName,
+            Options.JournalNameForm: OptionGroup.JournalName,
+            Options.HtmlFormat: OptionGroup.HTML,
+            Options.SurnameStyle: OptionGroup.HTML,
+            Options.JournalStyle: OptionGroup.HTML,
+            Options.VolumeStyle: OptionGroup.HTML,
+            Options.KeepNumbering: OptionGroup.Other,
+            Options.RemoveDoi: OptionGroup.Other,
+            Options.CrossrefAPI: OptionGroup.Other,
+        }[self]
+
 
 options_on_by_default: Set[Options] = {
+    Options.ProcessAuthorsAndYear,
+    Options.ProcessPageRangeVolume,
+    Options.ProcessJournalName,
+}
+
+primary_options: Set[Options] = {
     Options.ProcessAuthorsAndYear,
     Options.ProcessPageRangeVolume,
     Options.ProcessJournalName,
