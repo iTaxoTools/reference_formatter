@@ -31,14 +31,14 @@ class YearFormat(IntEnum):
     def terminator(self) -> str:
         return [":", ".", "", ".", ":", ","][self]
 
-    def format_year(self, year: int) -> str:
-        result = str(year)
+    def format_year(self, year: str) -> str:
+        result = year
         if self.has_paren():
             result = "(" + result + ")"
         return result + self.terminator()
 
     def __str__(self) -> str:
-        return self.format_year(1998)
+        return self.format_year("1998")
 
 
 class JournalSeparator(IntEnum):

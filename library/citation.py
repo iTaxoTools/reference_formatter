@@ -36,7 +36,7 @@ class YearPosition(Enum):
 class Reference(NamedTuple):
     numbering: Optional[slice]
     authors: Tuple[Optional[List[Author]], slice]
-    year: Tuple[int, slice, YearPosition]
+    year: Tuple[str, slice, YearPosition]
     article: slice
     journal_separator: Optional[slice]
     journal: Optional[Tuple[Journal, slice]]
@@ -262,7 +262,7 @@ class Reference(NamedTuple):
             s = s.strip()
         else:
             numbering = None
-        terminal_year_match = s.search(r"\((\d+)\)\S?$")
+        terminal_year_match = s.search(r"\((\d+[a-z]?)\)\S?$")
         if terminal_year_match:
             authors_article = Reference.split_three_words(
                 s[: terminal_year_match.start()]
@@ -272,17 +272,17 @@ class Reference(NamedTuple):
             else:
                 return None
             year = (
-                int(terminal_year_match.group(1)),
+                terminal_year_match.group(1),
                 s.match_position(terminal_year_match),
                 YearPosition.Terminal,
             )
         else:
-            year_match = s.search(r"\(?(\d+)\)?\S?")
+            year_match = s.search(r"\(?(\d+[a-z]?)\)?\S?")
             if not year_match:
                 return None
             authors, year_string, article = s.match_partition(year_match)
             year = (
-                int(year_match.group(1)),
+                year_match.group(1),
                 year_string.get_slice(),
                 YearPosition.Medial,
             )
