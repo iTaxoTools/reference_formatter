@@ -191,7 +191,7 @@ class Reference(NamedTuple):
         else:
             return input
 
-    def assert_parts_order(self):
+    def collect_slices(self) -> List[slice]:
         """
         asserts that all parts of the reference are in the expected order
         """
@@ -216,11 +216,45 @@ class Reference(NamedTuple):
             slices.append(self.year[1])
         if self.doi:
             slices.append(self.doi)
+        return slices
+
+    def assert_parts_order(self, slices: List[slice]):
+        """
+        asserts that all parts of the reference are in the expected order
+        """
         for i in range(len(slices) - 1):
             assert slices[i].stop <= slices[i + 1].start
 
+    def serialize(self, brackets: str) -> str:
+        open_bracket, close_bracket = tuple(brackets)
+        slices = self.collect_slices()
+        result = self.unparsed
+        for sl in reversed(slices):
+            start, stop, _ = sl.indices(len(result))
+            result = (
+                result[:start]
+                + open_bracket
+                + result[start:stop]
+                + close_bracket
+                + result[stop:]
+            )
+        for item in [
+            self.numbering,
+            self.journal_separator,
+            self.journal,
+            self.volume_separator,
+            self.volume,
+            self.page_range,
+            self.doi,
+        ]:
+            if item is None:
+                result += "0"
+            else:
+                result += "1"
+        return result
+
     def format_reference(self, options: OptionsDict, tags: Optional[ExtractedTags]):
-        self.assert_parts_order()
+        self.assert_parts_order(self.collect_slices())
         formatted_reference = self.unparsed
         formatted_reference = self.format_doi(options, formatted_reference)
         if options[Options.ProcessAuthorsAndYear]:
@@ -437,6 +471,49 @@ def parse_line(
         return Reference.parse(line, journal_matcher)
 
 
+def txt_to_references(
+    input: TextIO,
+    options: OptionsDict,
+    journal_matcher: Optional[JournalMatcher],
+) -> Iterator[Union[Reference, str]]:
+    prev_reference = None
+    for line in input:
+        if line[0] == "\ufeff":
+            line = line[1:]
+        line = normalize_space(line.rstrip())
+        if not line:
+            continue
+        parsed_line = parse_line(line, journal_matcher)
+        if isinstance(parsed_line, str) and prev_reference:  # line is doi
+            prev_reference.doi = "\n" + parsed_line
+            prev_reference.replace_doi("\n" + parsed_line)
+            yield prev_reference
+            prev_reference = None
+        elif isinstance(parsed_line, Reference):
+            if prev_reference:
+                yield prev_reference
+            prev_reference = parsed_line
+        else:
+            yield line
+            continue
+    if prev_reference:
+        yield prev_reference
+
+
+def txt_first_step(
+    input: TextIO,
+    output_dir: str,
+    options: OptionsDict,
+    journal_matcher: Optional[JournalMatcher],
+):
+    with open(os.path.join(output_dir, "output"), mode="w") as outfile:
+        for ref in txt_to_references(input, options, journal_matcher):
+            if isinstance(ref, Reference):
+                print(ref.serialize("{}"), file=outfile)
+            else:
+                print("*", ref, file=outfile)
+
+
 def process_reference_file(
     input: TextIO,
     output_dir: str,
@@ -444,28 +521,11 @@ def process_reference_file(
     journal_matcher: Optional[JournalMatcher],
 ):
     with open(os.path.join(output_dir, "output"), mode="w") as outfile:
-        prev_reference = None
-        for line in input:
-            if line[0] == "\ufeff":
-                line = line[1:]
-            line = normalize_space(line.rstrip())
-            if not line:
-                continue
-            parsed_line = parse_line(line, journal_matcher)
-            if isinstance(parsed_line, str) and prev_reference:  # line is doi
-                prev_reference.doi = "\n" + parsed_line
-                prev_reference.replace_doi("\n" + parsed_line)
-                print(prev_reference.format_reference(options, None), file=outfile)
-                prev_reference = None
-            elif isinstance(parsed_line, Reference):
-                if prev_reference:
-                    print(prev_reference.format_reference(options, None), file=outfile)
-                prev_reference = parsed_line
+        for ref in txt_to_references(input, options, journal_matcher):
+            if isinstance(ref, Reference):
+                print(ref.format_reference(options, None), file=outfile)
             else:
-                print("*", line, sep="", file=outfile)
-                continue
-        if prev_reference:
-            print(prev_reference.format_reference(options, None), file=outfile)
+                print("*", ref, file=outfile)
 
 
 def processed_references(
