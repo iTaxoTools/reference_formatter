@@ -18,6 +18,19 @@ class Author:
         self.initials = initials.replace(" ", "")
         self.span = span
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Author):
+            return NotImplemented
+        if self.is_et_al and other.is_et_al:
+            return True
+        return (
+            not self.is_et_al
+            and not other.is_et_al
+            and self.surname == other.surname
+            and self.initials == other.initials
+            and self.span == other.span
+        )
+
     def format_author(self, options: OptionsDict, first: bool, tags: ExtractedTags):
         if self.is_et_al:
             if options[Options.InitialsNoPeriod]:
