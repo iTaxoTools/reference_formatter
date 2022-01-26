@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from __future__ import annotations
 
 from enum import IntEnum, Enum
 from typing import (
@@ -31,6 +32,9 @@ from library.doi import parse_doi
 class YearPosition(Enum):
     Medial = 0
     Terminal = 1
+
+
+REFERENCE_FIELD_COUNT = 10
 
 
 class Reference(NamedTuple):
@@ -240,6 +244,9 @@ class Reference(NamedTuple):
             )
         for item in [
             self.numbering,
+            self.authors,
+            self.year,
+            self.article,
             self.journal_separator,
             self.journal,
             self.volume_separator,
@@ -252,6 +259,152 @@ class Reference(NamedTuple):
             else:
                 result += "1"
         return result
+
+    @staticmethod
+    def extract_slice(input: str, brackets: Tuple[str, str]) -> Tuple[str, slice]:
+        open_bracket, close_bracket = brackets
+        open_index = input.find(open_bracket)
+        close_index = input.find(close_bracket)
+        input = (
+            input[:open_index]
+            + input[open_index + 1 : close_index]
+            + input[close_index + 1 :]
+        )
+        return (input, slice(open_index, close_index - 1))
+
+    @staticmethod
+    def deserialize(
+        input: str, brackets: str, journal_matcher: Optional[JournalMatcher]
+    ) -> Reference:
+        open_bracket, close_bracket = tuple(brackets)
+        optionals = [c == "1" for c in input[-REFERENCE_FIELD_COUNT:]]
+        input = input[:-REFERENCE_FIELD_COUNT]
+        slices: List[Optional[slice]] = []
+        for present in optionals:
+            if present:
+                input, a_slice = Reference.extract_slice(
+                    input, (open_bracket, close_bracket)
+                )
+                slices.append(a_slice)
+            else:
+                slices.append(None)
+        return Reference.from_slices(slices, input, journal_matcher)
+
+    @staticmethod
+    def from_slices(
+        slices: List[Optional[slice]],
+        input: str,
+        journal_matcher: Optional[JournalMatcher],
+    ) -> Reference:
+        parsers = [
+            ("numbering", Reference._numbering_from_slice),
+            ("authors", Reference._authors_from_slice),
+            ("article", Reference._article_from_slice),
+            ("journal_separator", Reference._journal_separator_from_slice),
+            ("journal", Reference._journal_from_slice),
+            ("volume_separator", Reference._volume_separator_from_slice),
+            ("volume", Reference._volume_from_slice),
+            ("page_range", Reference._page_range_from_slice),
+            ("doi", Reference._doi_from_slice),
+        ]
+        if regex.fullmatch(r"\(?(\d+[a-z]?)\)?\S?", input[slices[3] or slice(0)]):
+            parsers.insert(2, ("year", Reference._year_from_slice))
+            year_position = YearPosition.Medial
+        else:
+            parsers.insert(8, ("year", Reference._year_from_slice))
+            year_position = YearPosition.Terminal
+        ref_dict = {
+            field_name: field_parser(slices[i], input, journal_matcher)
+            if slices[i]
+            else None
+            for i, (field_name, field_parser) in enumerate(parsers)
+        }
+        ref_dict["year"][2] = year_position
+        ref_dict["unparsed"] = input
+        return Reference(**ref_dict)
+
+    @staticmethod
+    def _numbering_from_slice(
+        a_slice: slice, _: str, journal_matcher: Optional[JournalMatcher]
+    ) -> slice:
+        return a_slice
+
+    @staticmethod
+    def _authors_from_slice(
+        a_slice: slice, input: str, journal_matcher: Optional[JournalMatcher]
+    ) -> Tuple[Optional[List[Author]], slice]:
+        start, end, _ = a_slice.indices(len(input))
+        positioned_authors = PositionedString(input[a_slice], start, end)
+        return Reference.parse_authors(positioned_authors), a_slice
+
+    @staticmethod
+    def _year_from_slice(
+        a_slice: slice, input: str, journal_matcher: Optional[JournalMatcher]
+    ) -> Tuple[str, slice, YearPosition]:
+        year_string = regex.search(r"\d+[a-z]?").group(0)
+        return year_string, a_slice, YearPosition.Medial
+
+    @staticmethod
+    def _article_from_slice(
+        a_slice: slice, _: str, journal_matcher: Optional[JournalMatcher]
+    ) -> slice:
+        return a_slice
+
+    @staticmethod
+    def _journal_separator_from_slice(
+        a_slice: slice, _: str, journal_matcher: Optional[JournalMatcher]
+    ) -> slice:
+        return a_slice
+
+    @staticmethod
+    def _journal_from_slice(
+        a_slice: slice, input: str, journal_matcher: Optional[JournalMatcher]
+    ) -> Tuple[Journal, slice]:
+        if journal_matcher is None:
+            return None, a_slice
+        journal_name_tuple = journal_matcher.extract_journal(input[a_slice])
+        if journal_name_tuple is None:
+            return None, a_slice
+        journal_name, _ = journal_name_tuple
+        return Journal(journal_name), a_slice
+
+    @staticmethod
+    def _volume_separator_from_slice(
+        a_slice: slice, _: str, journal_matcher: Optional[JournalMatcher]
+    ) -> slice:
+        return a_slice
+
+    @staticmethod
+    def _volume_from_slice(
+        a_slice: slice, input: str, journal_matcher: Optional[JournalMatcher]
+    ) -> Tuple[str, Optional[str], slice]:
+        volume_regex = regex.compile(
+            r"(?<vol>\d+)[,:]|"
+            r"(?<vol>\d+)\s*\((?<issue>\d[^)])\)|"
+            r"vol\S+\s*(?<vol>d+)\s*iss\S+\s*(?<issue>\d+)"
+        )
+        volume_match = regex.fullmatch(volume_regex, input[a_slice])
+        return volume_match.group("vol"), volume_match.group("issue"), a_slice
+
+    @staticmethod
+    def _page_range_from_slice(
+        a_slice: slice, input: str, journal_matcher: Optional[JournalMatcher]
+    ) -> Tuple[str, str, slice]:
+        page_range_regex = regex.compile(
+            r"(?:pp\.)?\s*([A-Za-z]*\d+)\s?[-‐‑‒–—―]\s?([A-Za-z]*\d+)\S?$"
+        )
+        page_range_match = regex.fullmatch(page_range_regex, input[a_slice])
+        return (
+            page_range_match.group(1).strip(),
+            page_range_match.group(2).strip(),
+            a_slice,
+        )
+
+    @staticmethod
+    def _doi_from_slice(
+        a_slice: slice, input: str, journal_matcher: Optional[JournalMatcher]
+    ) -> slice:
+        return a_slice
 
     def format_reference(self, options: OptionsDict, tags: Optional[ExtractedTags]):
         self.assert_parts_order(self.collect_slices())
