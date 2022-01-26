@@ -319,7 +319,9 @@ class Reference(NamedTuple):
             else None
             for i, (field_name, field_parser) in enumerate(parsers)
         }
-        ref_dict["year"][2] = year_position
+        year_as_list = list(ref_dict["year"])
+        year_as_list[2] = year_position
+        ref_dict["year"] = tuple(year_as_list)
         ref_dict["unparsed"] = input
         return Reference(**ref_dict)
 
@@ -341,7 +343,7 @@ class Reference(NamedTuple):
     def _year_from_slice(
         a_slice: slice, input: str, journal_matcher: Optional[JournalMatcher]
     ) -> Tuple[str, slice, YearPosition]:
-        year_string = regex.search(r"\d+[a-z]?").group(0)
+        year_string = regex.search(r"\d+[a-z]?", input[a_slice]).group(0)
         return year_string, a_slice, YearPosition.Medial
 
     @staticmethod
