@@ -2,8 +2,8 @@
 
 from typing import Dict, Optional
 
-from library.options import NameForm, OptionsDict, Options, Style, VolumeSeparator
-from library.handle_html import ExtractedTags
+from .options import NameForm, OptionsDict, Options, Style, VolumeSeparator
+from .handle_html import ExtractedTags
 
 
 class Journal:

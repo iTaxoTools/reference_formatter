@@ -2,8 +2,8 @@
 
 from typing import Optional
 
-from library.options import OptionsDict, Options, Style
-from library.handle_html import ExtractedTags
+from .options import OptionsDict, Options, Style
+from .handle_html import ExtractedTags
 
 
 class Author:

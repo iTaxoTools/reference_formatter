@@ -7,12 +7,13 @@ import json
 from crossref.restful import Works, Etiquette
 from fuzzywuzzy import fuzz
 
-from library.resources import get_resource
+from .resources import get_resource
 
 with open(get_resource("config.json")) as config_file:
     try:
         FUZZY_THRESHOLD: int = json.load(config_file).get(
-            "fuzzy_matching_threshold", 97)
+            "fuzzy_matching_threshold", 97
+        )
     except json.JSONDecodeError:
         FUZZY_THRESHOLD = 97
 
@@ -23,20 +24,21 @@ def load_etiquette_email() -> Optional[str]:
             email = email_file.readline().strip()
     except FileNotFoundError:
         return None
-    if '@' in email:
+    if "@" in email:
         return email
     else:
         return None
 
 
-PROJECT_NAME: str = 'reference-formatter'
-PROJECT_VERSION: str = '0.1.0'
-PROJECT_URL: str = 'https://github.com/iTaxoTools'
+PROJECT_NAME: str = "reference_formatter"
+PROJECT_VERSION: str = "0.1.0"
+PROJECT_URL: str = "https://github.com/iTaxoTools"
 ETIQUETTE_EMAIL: Optional[str] = load_etiquette_email()
 
 if ETIQUETTE_EMAIL:
     ETIQUETTE: Optional[Etiquette] = Etiquette(
-        PROJECT_NAME, PROJECT_VERSION, PROJECT_URL, ETIQUETTE_EMAIL)
+        PROJECT_NAME, PROJECT_VERSION, PROJECT_URL, ETIQUETTE_EMAIL
+    )
 else:
     ETIQUETTE = None
 
@@ -47,8 +49,9 @@ def doi_from_title(title: str, fuzzy: bool) -> Optional[str]:
     else:
         endpoint = Works()
     try:
-        request = (endpoint.query(title).select(
-            'DOI', 'title').sort('relevance').order('desc'))
+        request = (
+            endpoint.query(title).select("DOI", "title").sort("relevance").order("desc")
+        )
         logging.debug(f"Request {request.url}")
         response = next(request.__iter__())
         logging.debug(f"Got responce {response}")
@@ -57,8 +60,8 @@ def doi_from_title(title: str, fuzzy: bool) -> Optional[str]:
     except AttributeError:
         return None
     try:
-        if match_title(response['title'][0], title, fuzzy):
-            return "doi:" + response['DOI']
+        if match_title(response["title"][0], title, fuzzy):
+            return "doi:" + response["DOI"]
         else:
             return None
     except IndexError:

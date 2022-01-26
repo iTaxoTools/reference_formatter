@@ -8,10 +8,9 @@ from enum import IntEnum
 import pandas as pd
 from ahocorasick_rs import AhoCorasick, MATCHKIND_LEFTMOST_LONGEST
 
-from library.utils import *
-from library.positioned import PositionedString
-
-resource_path = getattr(sys, "_MEIPASS", sys.path[0])
+from .utils import *
+from .positioned import PositionedString
+from .resources import get_resource
 
 
 class NameForm(IntEnum):
@@ -36,9 +35,7 @@ class JournalMatcher:
     def __init__(self) -> None:
         self.table, self.matcher = make_matcher(fill_missing(load()))
 
-    def extract_journal(
-        self, s: str
-    ) -> Optional[Tuple[Dict[NameForm, str], slice]]:
+    def extract_journal(self, s: str) -> Optional[Tuple[Dict[NameForm, str], slice]]:
         matches = self.matcher.find_matches_as_indexes(s)
         if not matches:
             return None
@@ -51,7 +48,7 @@ class JournalMatcher:
 
 
 def load() -> pd.DataFrame:
-    path = os.path.join(resource_path, "data", "Journal_abbreviations.csv")
+    path = get_resource("Journal_abbreviations.csv")
 
     return pd.read_table(path, dtype=str).rename(
         columns={

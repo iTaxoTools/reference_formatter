@@ -4,7 +4,7 @@ from typing import Tuple, Dict, Any, Set
 
 from enum import IntEnum, Enum
 
-from library.journal_list import NameForm
+from .journal_list import NameForm
 
 
 class LastSeparator(IntEnum):

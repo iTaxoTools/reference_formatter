@@ -18,15 +18,15 @@ import os
 
 import regex  # type: ignore
 
-from library.utils import normalize_space, replace_slice
-from library.journal_list import JournalMatcher, NameForm
-from library.handle_html import ExtractedTags, HTMLList, extract_tags, ListEntry
-from library.positioned import PositionedString
-from library.crossref import doi_from_title
-from library.options import OptionsDict, Options, Style, LastSeparator, JournalSeparator
-from library.author import Author
-from library.journal import Journal
-from library.doi import parse_doi
+from .utils import normalize_space, replace_slice
+from .journal_list import JournalMatcher, NameForm
+from .handle_html import ExtractedTags, HTMLList, extract_tags, ListEntry
+from .positioned import PositionedString
+from .crossref import doi_from_title
+from .options import OptionsDict, Options, Style, LastSeparator, JournalSeparator
+from .author import Author
+from .journal import Journal
+from .doi import parse_doi
 
 
 class YearPosition(Enum):

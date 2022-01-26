@@ -4,7 +4,7 @@ from typing import Tuple, Optional
 
 import regex
 
-from library.positioned import PositionedString
+from .positioned import PositionedString
 
 
 def parse_doi(line: PositionedString) -> Tuple[PositionedString, Optional[slice]]:

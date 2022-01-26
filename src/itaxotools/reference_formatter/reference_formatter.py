@@ -4,7 +4,7 @@ import tkinter as tk
 import tempfile
 import os
 
-from library.gui import FmtGui
+from .library.gui import FmtGui
 
 
 def gui_main():
@@ -29,5 +29,9 @@ def gui_main():
     root.mainloop()
 
 
-if __name__ == "__main__":
+def main() -> None:
     gui_main()
+
+
+if __name__ == "__main__":
+    main()

@@ -12,21 +12,21 @@ from enum import IntEnum
 import os
 from pathlib import Path
 
-from library.citation import (
+from .citation import (
     process_reference_file,
     txt_first_step,
     process_reference_html,
 )
-from library.options import (
+from .options import (
     OptionGroup,
     Options,
     OptionsDict,
     options_on_by_default,
     primary_options,
 )
-from library.journal_list import JournalMatcher
-from library.resources import get_resource
-import library.crossref as crossref
+from .journal_list import JournalMatcher
+from .resources import get_resource
+from . import crossref
 
 
 class TkWarnLogger(logging.Handler):
@@ -138,7 +138,7 @@ class FmtGui(ttk.Frame):
         self.banner = ttk.Frame(self)
         ttk.Separator(self.banner, orient="horizontal").pack(side=tk.BOTTOM, fill=tk.X)
         ttk.Label(
-            self.banner, text="reference-formatter", font=tkfont.Font(size=20)
+            self.banner, text="reference_formatter", font=tkfont.Font(size=20)
         ).pack(side=tk.LEFT)
 
         self.logo = tk.PhotoImage(
