@@ -242,10 +242,9 @@ class Reference(NamedTuple):
                 + close_bracket
                 + result[stop:]
             )
-        for item in [
+        fields: List[Any] = [
             self.numbering,
             self.authors,
-            self.year,
             self.article,
             self.journal_separator,
             self.journal,
@@ -253,11 +252,20 @@ class Reference(NamedTuple):
             self.volume,
             self.page_range,
             self.doi,
-        ]:
+        ]
+        if self.year[2] == YearPosition.Terminal:
+            fields.insert(8, self.year)
+        else:
+            fields.insert(2, self.year)
+        for item in fields:
             if item is None:
                 result += "0"
             else:
                 result += "1"
+        if self.year[2] == YearPosition.Terminal:
+            result += "t"
+        else:
+            result += "m"
         return result
 
     @staticmethod
@@ -277,6 +285,11 @@ class Reference(NamedTuple):
         input: str, brackets: str, journal_matcher: Optional[JournalMatcher]
     ) -> Reference:
         open_bracket, close_bracket = tuple(brackets)
+        if input[-1] == "t":
+            year_position = YearPosition.Terminal
+        else:
+            year_position = YearPosition.Medial
+        input = input[:-1]
         optionals = [c == "1" for c in input[-REFERENCE_FIELD_COUNT:]]
         input = input[:-REFERENCE_FIELD_COUNT]
         slices: List[Optional[slice]] = []
@@ -288,13 +301,14 @@ class Reference(NamedTuple):
                 slices.append(a_slice)
             else:
                 slices.append(None)
-        return Reference.from_slices(slices, input, journal_matcher)
+        return Reference.from_slices(slices, input, journal_matcher, year_position)
 
     @staticmethod
     def from_slices(
         slices: List[Optional[slice]],
         input: str,
         journal_matcher: Optional[JournalMatcher],
+        year_position: YearPosition,
     ) -> Reference:
         parsers = [
             ("numbering", Reference._numbering_from_slice),
@@ -307,12 +321,10 @@ class Reference(NamedTuple):
             ("page_range", Reference._page_range_from_slice),
             ("doi", Reference._doi_from_slice),
         ]
-        if regex.fullmatch(r"\(?(\d+[a-z]?)\)?\S?", input[slices[2] or slice(0)]):
-            parsers.insert(2, ("year", Reference._year_from_slice))
-            year_position = YearPosition.Medial
-        else:
+        if year_position == YearPosition.Terminal:
             parsers.insert(8, ("year", Reference._year_from_slice))
-            year_position = YearPosition.Terminal
+        else:
+            parsers.insert(2, ("year", Reference._year_from_slice))
         ref_dict = {
             field_name: field_parser(slices[i], input, journal_matcher)
             if slices[i]
