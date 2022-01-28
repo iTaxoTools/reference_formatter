@@ -109,7 +109,11 @@ class Reference(NamedTuple):
 
     def format_terminal_year(self, options: OptionsDict, input: str) -> str:
         if self.year[2] == YearPosition.Terminal:
-            return replace_slice(input, self.year[1], "")
+            year_start = self.year[1].start
+            if regex.match(r".*\.\s*$", input[:year_start]):
+                return replace_slice(input, self.year[1], "")
+            else:
+                return replace_slice(input, self.year[1], ".")
         else:
             return input
 
@@ -124,7 +128,7 @@ class Reference(NamedTuple):
         if year_position == YearPosition.Terminal:
             span = self.year_gap()
         formatted_year = options[Options.YearFormat].format_year(self.year[0])
-        return replace_slice(input, span, formatted_year + " ")
+        return replace_slice(input, span, " " + formatted_year + " ")
 
     def format_article(
         self, options: OptionsDict, tags: Optional[ExtractedTags], input: str
