@@ -292,6 +292,8 @@ class Reference(NamedTuple):
         input = input[:-1]
         optionals = [c == "1" for c in input[-REFERENCE_FIELD_COUNT:]]
         input = input[:-REFERENCE_FIELD_COUNT]
+        if input.count(open_bracket) == 0:
+            raise StepOrderViolated
         slices: List[Optional[slice]] = []
         for present in optionals:
             if present:
@@ -667,6 +669,10 @@ def txt_to_references(
         yield prev_reference
 
 
+class StepOrderViolated(Exception):
+    pass
+
+
 def txt_first_step(
     input: TextIO,
     output_dir: str,
@@ -679,6 +685,22 @@ def txt_first_step(
                 print(ref.serialize("{}"), file=outfile)
             else:
                 print("*", ref, file=outfile)
+
+
+def txt_second_step(
+    input: Iterator[str],
+    output_dir: str,
+    options: OptionsDict,
+    journal_matcher: Optional[JournalMatcher],
+) -> None:
+    with open(os.path.join(output_dir, "output"), mode="w") as outfile:
+        for line in input:
+            line = line.rstrip()
+            if line[0] == "*":
+                print(line, file=outfile)
+            else:
+                ref = Reference.deserialize(line, "{}", journal_matcher)
+                print(ref.format_reference(options, None), file=outfile)
 
 
 def process_reference_file(

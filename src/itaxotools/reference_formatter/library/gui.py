@@ -15,7 +15,9 @@ from pathlib import Path
 from .citation import (
     process_reference_file,
     txt_first_step,
+    txt_second_step,
     process_reference_html,
+    StepOrderViolated,
 )
 from .options import (
     OptionGroup,
@@ -152,7 +154,7 @@ class FmtGui(ttk.Frame):
     def create_top_frame(self) -> None:
         self.top_frame = ttk.Frame(self)
         self.top_frame.rowconfigure(0, weight=1)
-        self.top_frame.columnconfigure(5, weight=1)
+        self.top_frame.columnconfigure(6, weight=1)
 
         ttk.Button(self.top_frame, text="Open", command=self.open_command).grid(
             row=0, column=0
@@ -173,8 +175,11 @@ class FmtGui(ttk.Frame):
             text="Run step 1",
             command=self.run_command(interactive=True),
         ).grid(row=0, column=3)
+        ttk.Button(
+            self.top_frame, text="Run step 2", command=self.run_second_step
+        ).grid(row=0, column=4)
         ttk.Button(self.top_frame, text="Clear", command=self.clear_command).grid(
-            row=0, column=4
+            row=0, column=5
         )
 
     def clear_command(self) -> None:
@@ -263,6 +268,27 @@ class FmtGui(ttk.Frame):
                 tkmessagebox.showinfo("Done", "Processing is complete")
 
         return run
+
+    def run_second_step(self) -> None:
+        self.clear_command()
+        second_input = Path(self.preview_dir) / "input2"
+        second_input.unlink(missing_ok=True)
+        (Path(self.preview_dir) / "output").rename(second_input)
+        with open(second_input) as input2:
+            try:
+                txt_second_step(
+                    input2,
+                    self.preview_dir,
+                    self.parameters_frame.get(),
+                    self.journal_matcher,
+                )
+            except StepOrderViolated:
+                logging.error(
+                    "Something went wrong.\n"
+                    "Perhaps you didn't run step 1 before step 2"
+                )
+                return
+            self.make_preview()
 
     def input_has_html_extension(self) -> bool:
         _, ext = os.path.splitext(self.input_file.get())
