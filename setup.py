@@ -41,7 +41,14 @@ setup(
         where="src",
     ),
     python_requires=">=3.9, <4",
-    install_requires=[],
+    install_requires=[
+        "tkinterweb",
+        "regex",
+        "pandas",
+        "ahocorasick_rs",
+        "crossrefapi",
+        "fuzzywuzzy",
+    ],
     extras_require={
         "dev": ["pyinstaller"],
     },
