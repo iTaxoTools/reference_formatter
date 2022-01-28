@@ -494,6 +494,8 @@ class Reference(NamedTuple):
                 YearPosition.Medial,
             )
         authors = authors.strip()
+        if not regex.search(r"\p{Lower}", authors.content):
+            return None
         article = article.strip()
         page_range_regex = regex.compile(
             r"(?:pp\.)?\s*([A-Za-z]*\d+)\s?[-‐‑‒–—―]\s?([A-Za-z]*\d+)\S?$"
