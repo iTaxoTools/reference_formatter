@@ -307,7 +307,7 @@ class Reference(NamedTuple):
             ("page_range", Reference._page_range_from_slice),
             ("doi", Reference._doi_from_slice),
         ]
-        if regex.fullmatch(r"\(?(\d+[a-z]?)\)?\S?", input[slices[3] or slice(0)]):
+        if regex.fullmatch(r"\(?(\d+[a-z]?)\)?\S?", input[slices[2] or slice(0)]):
             parsers.insert(2, ("year", Reference._year_from_slice))
             year_position = YearPosition.Medial
         else:
