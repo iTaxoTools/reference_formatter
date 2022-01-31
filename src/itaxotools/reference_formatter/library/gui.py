@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import logging
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Union, Callable
 from tkinterweb import HtmlFrame
 import tkinter as tk
 import tkinter.ttk as ttk
@@ -12,20 +12,23 @@ from enum import IntEnum
 import os
 from pathlib import Path
 
-from library.citation import (
+from .citation import (
     process_reference_file,
+    txt_first_step,
+    txt_second_step,
     process_reference_html,
+    StepOrderViolated,
 )
-from library.options import (
+from .options import (
     OptionGroup,
     Options,
     OptionsDict,
     options_on_by_default,
     primary_options,
 )
-from library.journal_list import JournalMatcher
-from library.resources import get_resource
-import library.crossref as crossref
+from .journal_list import JournalMatcher
+from .resources import get_resource
+from . import crossref
 
 
 class TkWarnLogger(logging.Handler):
@@ -137,7 +140,7 @@ class FmtGui(ttk.Frame):
         self.banner = ttk.Frame(self)
         ttk.Separator(self.banner, orient="horizontal").pack(side=tk.BOTTOM, fill=tk.X)
         ttk.Label(
-            self.banner, text="reference-formatter", font=tkfont.Font(size=20)
+            self.banner, text="reference_formatter", font=tkfont.Font(size=20)
         ).pack(side=tk.LEFT)
 
         self.logo = tk.PhotoImage(
@@ -151,7 +154,7 @@ class FmtGui(ttk.Frame):
     def create_top_frame(self) -> None:
         self.top_frame = ttk.Frame(self)
         self.top_frame.rowconfigure(0, weight=1)
-        self.top_frame.columnconfigure(4, weight=1)
+        self.top_frame.columnconfigure(6, weight=1)
 
         ttk.Button(self.top_frame, text="Open", command=self.open_command).grid(
             row=0, column=0
@@ -162,10 +165,21 @@ class FmtGui(ttk.Frame):
         ttk_style = ttk.Style()
         ttk_style.configure("Run.TButton", background="blue")
         ttk.Button(
-            self.top_frame, text="Run", command=self.run_command, style="Run.TButton"
+            self.top_frame,
+            text="Run",
+            command=self.run_command(interactive=False),
+            style="Run.TButton",
         ).grid(row=0, column=2)
+        ttk.Button(
+            self.top_frame,
+            text="Run step 1",
+            command=self.run_command(interactive=True),
+        ).grid(row=0, column=3)
+        ttk.Button(
+            self.top_frame, text="Run step 2", command=self.run_second_step
+        ).grid(row=0, column=4)
         ttk.Button(self.top_frame, text="Clear", command=self.clear_command).grid(
-            row=0, column=3
+            row=0, column=5
         )
 
     def clear_command(self) -> None:
@@ -198,47 +212,83 @@ class FmtGui(ttk.Frame):
             self.html_preview.grid_remove()
             self.plain_preview.grid()
 
-    def run_command(self) -> None:
+    def run_command(self, interactive: bool) -> Callable[[], None]:
+        def run() -> None:
+            self.clear_command()
+            options = self.parameters_frame.get()
+            if options[Options.ProcessJournalName] and not self.journal_matcher:
+                msg = tk.Toplevel(self)
+                if self.tk.call("tk", "windowingsystem") == "x11":
+                    msg.attributes("-type", "splash")
+                msg.title("Please wait")
+                ttk.Label(msg, text="Loading journals' names").grid()
+                self.update()
+                self.journal_matcher = JournalMatcher()
+                msg.destroy()
+                self.update()
+            if options[Options.CrossrefAPI] and not crossref.ETIQUETTE_EMAIL:
+                logging.warning(
+                    "CrossRef API asks polite users to provide their email.\n"
+                    "\n"
+                    "Please put a valid email into "
+                    f"{get_resource('crossref_etiquette_email.txt')}"
+                )
+            try:
+                with open(self.input_file.get(), errors="replace") as infile:
+                    if options[Options.HtmlFormat]:
+                        if not interactive:
+                            process_reference_html(
+                                infile, self.preview_dir, options, self.journal_matcher
+                            )
+                        else:
+                            logging.warning(
+                                "Two step transformation is"
+                                "not yet supported for HTML format"
+                            )
+                    else:
+                        if self.input_has_html_extension():
+                            logging.warning(
+                                "Input might be html file."
+                                ' Consider enabling "HTML format" option.'
+                            )
+                        if interactive:
+                            txt_first_step(
+                                infile, self.preview_dir, options, self.journal_matcher
+                            )
+                        else:
+                            process_reference_file(
+                                infile, self.preview_dir, options, self.journal_matcher
+                            )
+            except FileNotFoundError:
+                tkmessagebox.showerror(
+                    "Error", f"File {self.input_file.get()} cannot be opened"
+                )
+            else:
+                self.make_preview()
+                tkmessagebox.showinfo("Done", "Processing is complete")
+
+        return run
+
+    def run_second_step(self) -> None:
         self.clear_command()
-        options = self.parameters_frame.get()
-        if options[Options.ProcessJournalName] and not self.journal_matcher:
-            msg = tk.Toplevel(self)
-            if self.tk.call("tk", "windowingsystem") == "x11":
-                msg.attributes("-type", "splash")
-            msg.title("Please wait")
-            ttk.Label(msg, text="Loading journals' names").grid()
-            self.update()
-            self.journal_matcher = JournalMatcher()
-            msg.destroy()
-            self.update()
-        if options[Options.CrossrefAPI] and not crossref.ETIQUETTE_EMAIL:
-            logging.warning(
-                "CrossRef API asks polite users to provide their email.\n"
-                "\n"
-                f"Please put a valid email into {get_resource('crossref_etiquette_email.txt')}"
-            )
-        try:
-            with open(self.input_file.get(), errors="replace") as infile:
-                if options[Options.HtmlFormat]:
-                    process_reference_html(
-                        infile, self.preview_dir, options, self.journal_matcher
-                    )
-                else:
-                    if self.input_has_html_extension():
-                        logging.warning(
-                            "Input might be html file."
-                            ' Consider enabling "HTML format" option.'
-                        )
-                    process_reference_file(
-                        infile, self.preview_dir, options, self.journal_matcher
-                    )
-        except FileNotFoundError:
-            tkmessagebox.showerror(
-                "Error", f"File {self.input_file.get()} cannot be opened"
-            )
-        else:
+        second_input = Path(self.preview_dir) / "input2"
+        second_input.unlink(missing_ok=True)
+        (Path(self.preview_dir) / "output").rename(second_input)
+        with open(second_input) as input2:
+            try:
+                txt_second_step(
+                    input2,
+                    self.preview_dir,
+                    self.parameters_frame.get(),
+                    self.journal_matcher,
+                )
+            except StepOrderViolated:
+                logging.error(
+                    "Something went wrong.\n"
+                    "Perhaps you didn't run step 1 before step 2"
+                )
+                return
             self.make_preview()
-            tkmessagebox.showinfo("Done", "Processing is complete")
 
     def input_has_html_extension(self) -> bool:
         _, ext = os.path.splitext(self.input_file.get())

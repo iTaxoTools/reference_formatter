@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from __future__ import annotations
 
 from enum import IntEnum, Enum
 from typing import (
@@ -17,15 +18,15 @@ import os
 
 import regex  # type: ignore
 
-from library.utils import normalize_space, replace_slice
-from library.journal_list import JournalMatcher, NameForm
-from library.handle_html import ExtractedTags, HTMLList, extract_tags, ListEntry
-from library.positioned import PositionedString
-from library.crossref import doi_from_title
-from library.options import OptionsDict, Options, Style, LastSeparator, JournalSeparator
-from library.author import Author
-from library.journal import Journal
-from library.doi import parse_doi
+from .utils import normalize_space, replace_slice
+from .journal_list import JournalMatcher, NameForm
+from .handle_html import ExtractedTags, HTMLList, extract_tags, ListEntry
+from .positioned import PositionedString
+from .crossref import doi_from_title
+from .options import OptionsDict, Options, Style, LastSeparator, JournalSeparator
+from .author import Author
+from .journal import Journal
+from .doi import parse_doi
 
 
 class YearPosition(Enum):
@@ -33,10 +34,13 @@ class YearPosition(Enum):
     Terminal = 1
 
 
+REFERENCE_FIELD_COUNT = 10
+
+
 class Reference(NamedTuple):
     numbering: Optional[slice]
     authors: Tuple[Optional[List[Author]], slice]
-    year: Tuple[int, slice, YearPosition]
+    year: Tuple[str, slice, YearPosition]
     article: slice
     journal_separator: Optional[slice]
     journal: Optional[Tuple[Journal, slice]]
@@ -105,7 +109,11 @@ class Reference(NamedTuple):
 
     def format_terminal_year(self, options: OptionsDict, input: str) -> str:
         if self.year[2] == YearPosition.Terminal:
-            return replace_slice(input, self.year[1], "")
+            year_start = self.year[1].start
+            if regex.match(r".*\.\s*$", input[:year_start]):
+                return replace_slice(input, self.year[1], "")
+            else:
+                return replace_slice(input, self.year[1], ".")
         else:
             return input
 
@@ -120,7 +128,7 @@ class Reference(NamedTuple):
         if year_position == YearPosition.Terminal:
             span = self.year_gap()
         formatted_year = options[Options.YearFormat].format_year(self.year[0])
-        return replace_slice(input, span, formatted_year + " ")
+        return replace_slice(input, span, " " + formatted_year + " ")
 
     def format_article(
         self, options: OptionsDict, tags: Optional[ExtractedTags], input: str
@@ -191,7 +199,7 @@ class Reference(NamedTuple):
         else:
             return input
 
-    def assert_parts_order(self):
+    def collect_slices(self) -> List[slice]:
         """
         asserts that all parts of the reference are in the expected order
         """
@@ -216,11 +224,210 @@ class Reference(NamedTuple):
             slices.append(self.year[1])
         if self.doi:
             slices.append(self.doi)
+        return slices
+
+    def assert_parts_order(self, slices: List[slice]):
+        """
+        asserts that all parts of the reference are in the expected order
+        """
         for i in range(len(slices) - 1):
             assert slices[i].stop <= slices[i + 1].start
 
+    def serialize(self, brackets: str) -> str:
+        open_bracket, close_bracket = tuple(brackets)
+        slices = self.collect_slices()
+        result = self.unparsed
+        for sl in reversed(slices):
+            start, stop, _ = sl.indices(len(result))
+            result = (
+                result[:start]
+                + open_bracket
+                + result[start:stop]
+                + close_bracket
+                + result[stop:]
+            )
+        fields: List[Any] = [
+            self.numbering,
+            self.authors,
+            self.article,
+            self.journal_separator,
+            self.journal,
+            self.volume_separator,
+            self.volume,
+            self.page_range,
+            self.doi,
+        ]
+        if self.year[2] == YearPosition.Terminal:
+            fields.insert(8, self.year)
+        else:
+            fields.insert(2, self.year)
+        for item in fields:
+            if item is None:
+                result += "0"
+            else:
+                result += "1"
+        if self.year[2] == YearPosition.Terminal:
+            result += "t"
+        else:
+            result += "m"
+        return result
+
+    @staticmethod
+    def extract_slice(input: str, brackets: Tuple[str, str]) -> Tuple[str, slice]:
+        open_bracket, close_bracket = brackets
+        open_index = input.find(open_bracket)
+        close_index = input.find(close_bracket)
+        input = (
+            input[:open_index]
+            + input[open_index + 1 : close_index]
+            + input[close_index + 1 :]
+        )
+        return (input, slice(open_index, close_index - 1))
+
+    @staticmethod
+    def deserialize(
+        input: str, brackets: str, journal_matcher: Optional[JournalMatcher]
+    ) -> Reference:
+        open_bracket, close_bracket = tuple(brackets)
+        if input[-1] == "t":
+            year_position = YearPosition.Terminal
+        else:
+            year_position = YearPosition.Medial
+        input = input[:-1]
+        optionals = [c == "1" for c in input[-REFERENCE_FIELD_COUNT:]]
+        input = input[:-REFERENCE_FIELD_COUNT]
+        if input.count(open_bracket) == 0:
+            raise StepOrderViolated
+        slices: List[Optional[slice]] = []
+        for present in optionals:
+            if present:
+                input, a_slice = Reference.extract_slice(
+                    input, (open_bracket, close_bracket)
+                )
+                slices.append(a_slice)
+            else:
+                slices.append(None)
+        return Reference.from_slices(slices, input, journal_matcher, year_position)
+
+    @staticmethod
+    def from_slices(
+        slices: List[Optional[slice]],
+        input: str,
+        journal_matcher: Optional[JournalMatcher],
+        year_position: YearPosition,
+    ) -> Reference:
+        parsers = [
+            ("numbering", Reference._numbering_from_slice),
+            ("authors", Reference._authors_from_slice),
+            ("article", Reference._article_from_slice),
+            ("journal_separator", Reference._journal_separator_from_slice),
+            ("journal", Reference._journal_from_slice),
+            ("volume_separator", Reference._volume_separator_from_slice),
+            ("volume", Reference._volume_from_slice),
+            ("page_range", Reference._page_range_from_slice),
+            ("doi", Reference._doi_from_slice),
+        ]
+        if year_position == YearPosition.Terminal:
+            parsers.insert(8, ("year", Reference._year_from_slice))
+        else:
+            parsers.insert(2, ("year", Reference._year_from_slice))
+        ref_dict = {
+            field_name: field_parser(slices[i], input, journal_matcher)
+            if slices[i]
+            else None
+            for i, (field_name, field_parser) in enumerate(parsers)
+        }
+        year_as_list = list(ref_dict["year"])
+        year_as_list[2] = year_position
+        ref_dict["year"] = tuple(year_as_list)
+        ref_dict["unparsed"] = input
+        return Reference(**ref_dict)
+
+    @staticmethod
+    def _numbering_from_slice(
+        a_slice: slice, _: str, journal_matcher: Optional[JournalMatcher]
+    ) -> slice:
+        return a_slice
+
+    @staticmethod
+    def _authors_from_slice(
+        a_slice: slice, input: str, journal_matcher: Optional[JournalMatcher]
+    ) -> Tuple[Optional[List[Author]], slice]:
+        start, end, _ = a_slice.indices(len(input))
+        positioned_authors = PositionedString(input[a_slice], start, end)
+        return Reference.parse_authors(positioned_authors), a_slice
+
+    @staticmethod
+    def _year_from_slice(
+        a_slice: slice, input: str, journal_matcher: Optional[JournalMatcher]
+    ) -> Tuple[str, slice, YearPosition]:
+        year_string = regex.search(r"\d+[a-z]?", input[a_slice]).group(0)
+        return year_string, a_slice, YearPosition.Medial
+
+    @staticmethod
+    def _article_from_slice(
+        a_slice: slice, _: str, journal_matcher: Optional[JournalMatcher]
+    ) -> slice:
+        return a_slice
+
+    @staticmethod
+    def _journal_separator_from_slice(
+        a_slice: slice, _: str, journal_matcher: Optional[JournalMatcher]
+    ) -> slice:
+        return a_slice
+
+    @staticmethod
+    def _journal_from_slice(
+        a_slice: slice, input: str, journal_matcher: Optional[JournalMatcher]
+    ) -> Tuple[Journal, slice]:
+        if journal_matcher is None:
+            return None, a_slice
+        journal_name_tuple = journal_matcher.extract_journal(input[a_slice])
+        if journal_name_tuple is None:
+            return None, a_slice
+        journal_name, _ = journal_name_tuple
+        return Journal(journal_name), a_slice
+
+    @staticmethod
+    def _volume_separator_from_slice(
+        a_slice: slice, _: str, journal_matcher: Optional[JournalMatcher]
+    ) -> slice:
+        return a_slice
+
+    @staticmethod
+    def _volume_from_slice(
+        a_slice: slice, input: str, journal_matcher: Optional[JournalMatcher]
+    ) -> Tuple[str, Optional[str], slice]:
+        volume_regex = regex.compile(
+            r"(?<vol>\d+)[,:]|"
+            r"(?<vol>\d+)\s*\((?<issue>\d[^)])\)|"
+            r"vol\S+\s*(?<vol>d+)\s*iss\S+\s*(?<issue>\d+)"
+        )
+        volume_match = regex.fullmatch(volume_regex, input[a_slice])
+        return volume_match.group("vol"), volume_match.group("issue"), a_slice
+
+    @staticmethod
+    def _page_range_from_slice(
+        a_slice: slice, input: str, journal_matcher: Optional[JournalMatcher]
+    ) -> Tuple[str, str, slice]:
+        page_range_regex = regex.compile(
+            r"(?:pp\.)?\s*([A-Za-z]*\d+)\s?[-‐‑‒–—―]\s?([A-Za-z]*\d+)\S?$"
+        )
+        page_range_match = regex.fullmatch(page_range_regex, input[a_slice])
+        return (
+            page_range_match.group(1).strip(),
+            page_range_match.group(2).strip(),
+            a_slice,
+        )
+
+    @staticmethod
+    def _doi_from_slice(
+        a_slice: slice, input: str, journal_matcher: Optional[JournalMatcher]
+    ) -> slice:
+        return a_slice
+
     def format_reference(self, options: OptionsDict, tags: Optional[ExtractedTags]):
-        self.assert_parts_order()
+        self.assert_parts_order(self.collect_slices())
         formatted_reference = self.unparsed
         formatted_reference = self.format_doi(options, formatted_reference)
         if options[Options.ProcessAuthorsAndYear]:
@@ -262,7 +469,7 @@ class Reference(NamedTuple):
             s = s.strip()
         else:
             numbering = None
-        terminal_year_match = s.search(r"\((\d+)\)\S?$")
+        terminal_year_match = s.search(r"\((\d+[a-z]?)\)\S?$")
         if terminal_year_match:
             authors_article = Reference.split_three_words(
                 s[: terminal_year_match.start()]
@@ -272,21 +479,23 @@ class Reference(NamedTuple):
             else:
                 return None
             year = (
-                int(terminal_year_match.group(1)),
+                terminal_year_match.group(1),
                 s.match_position(terminal_year_match),
                 YearPosition.Terminal,
             )
         else:
-            year_match = s.search(r"\(?(\d+)\)?\S?")
+            year_match = s.search(r"\(?(\d+[a-z]?)\)?\S?")
             if not year_match:
                 return None
             authors, year_string, article = s.match_partition(year_match)
             year = (
-                int(year_match.group(1)),
+                year_match.group(1),
                 year_string.get_slice(),
                 YearPosition.Medial,
             )
         authors = authors.strip()
+        if not regex.search(r"\p{Lower}", authors.content):
+            return None
         article = article.strip()
         page_range_regex = regex.compile(
             r"(?:pp\.)?\s*([A-Za-z]*\d+)\s?[-‐‑‒–—―]\s?([A-Za-z]*\d+)\S?$"
@@ -437,6 +646,69 @@ def parse_line(
         return Reference.parse(line, journal_matcher)
 
 
+def txt_to_references(
+    input: TextIO,
+    options: OptionsDict,
+    journal_matcher: Optional[JournalMatcher],
+) -> Iterator[Union[Reference, str]]:
+    prev_reference = None
+    for line in input:
+        if line[0] == "\ufeff":
+            line = line[1:]
+        line = normalize_space(line.rstrip())
+        if not line:
+            continue
+        parsed_line = parse_line(line, journal_matcher)
+        if isinstance(parsed_line, str) and prev_reference:  # line is doi
+            prev_reference.doi = "\n" + parsed_line
+            prev_reference.replace_doi("\n" + parsed_line)
+            yield prev_reference
+            prev_reference = None
+        elif isinstance(parsed_line, Reference):
+            if prev_reference:
+                yield prev_reference
+            prev_reference = parsed_line
+        else:
+            yield line
+            continue
+    if prev_reference:
+        yield prev_reference
+
+
+class StepOrderViolated(Exception):
+    pass
+
+
+def txt_first_step(
+    input: TextIO,
+    output_dir: str,
+    options: OptionsDict,
+    journal_matcher: Optional[JournalMatcher],
+):
+    with open(os.path.join(output_dir, "output"), mode="w") as outfile:
+        for ref in txt_to_references(input, options, journal_matcher):
+            if isinstance(ref, Reference):
+                print(ref.serialize("{}"), file=outfile)
+            else:
+                print("*", ref, file=outfile)
+
+
+def txt_second_step(
+    input: Iterator[str],
+    output_dir: str,
+    options: OptionsDict,
+    journal_matcher: Optional[JournalMatcher],
+) -> None:
+    with open(os.path.join(output_dir, "output"), mode="w") as outfile:
+        for line in input:
+            line = line.rstrip()
+            if line[0] == "*":
+                print(line, file=outfile)
+            else:
+                ref = Reference.deserialize(line, "{}", journal_matcher)
+                print(ref.format_reference(options, None), file=outfile)
+
+
 def process_reference_file(
     input: TextIO,
     output_dir: str,
@@ -444,28 +716,11 @@ def process_reference_file(
     journal_matcher: Optional[JournalMatcher],
 ):
     with open(os.path.join(output_dir, "output"), mode="w") as outfile:
-        prev_reference = None
-        for line in input:
-            if line[0] == "\ufeff":
-                line = line[1:]
-            line = normalize_space(line.rstrip())
-            if not line:
-                continue
-            parsed_line = parse_line(line, journal_matcher)
-            if isinstance(parsed_line, str) and prev_reference:  # line is doi
-                prev_reference.doi = "\n" + parsed_line
-                prev_reference.replace_doi("\n" + parsed_line)
-                print(prev_reference.format_reference(options, None), file=outfile)
-                prev_reference = None
-            elif isinstance(parsed_line, Reference):
-                if prev_reference:
-                    print(prev_reference.format_reference(options, None), file=outfile)
-                prev_reference = parsed_line
+        for ref in txt_to_references(input, options, journal_matcher):
+            if isinstance(ref, Reference):
+                print(ref.format_reference(options, None), file=outfile)
             else:
-                print("*", line, sep="", file=outfile)
-                continue
-        if prev_reference:
-            print(prev_reference.format_reference(options, None), file=outfile)
+                print("*", ref, file=outfile)
 
 
 def processed_references(

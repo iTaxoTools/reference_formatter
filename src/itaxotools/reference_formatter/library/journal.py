@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 
 from typing import Dict, Optional
 
-from library.options import NameForm, OptionsDict, Options, Style, VolumeSeparator
-from library.handle_html import ExtractedTags
+from .options import NameForm, OptionsDict, Options, Style, VolumeSeparator
+from .handle_html import ExtractedTags
 
 
 class Journal:
@@ -12,6 +13,12 @@ class Journal:
         name: Dict[NameForm, str],
     ):
         self.name = name
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Journal):
+            return self.name == other.name
+        else:
+            return NotImplemented
 
     def format(self, options: OptionsDict, tags: ExtractedTags, span: slice) -> str:
         journal_name = self.name[options[Options.JournalNameForm]]

@@ -7,7 +7,7 @@ from typing import Tuple, Optional, NamedTuple, Iterator, List
 
 import regex
 
-from library.utils import normalize_space
+from .utils import normalize_space
 
 
 class TagPosition(NamedTuple):
@@ -21,7 +21,7 @@ class LocatedTag(NamedTuple):
 
 
 def _find_tag(input: str, tag: str) -> Optional[TagPosition]:
-    tag_match = regex.search(r'<\s*' + tag + r'[^>]*>', input, flags=regex.IGNORECASE)
+    tag_match = regex.search(r"<\s*" + tag + r"[^>]*>", input, flags=regex.IGNORECASE)
     if tag_match:
         return TagPosition(tag_match.start(), tag_match.end())
     else:
@@ -29,16 +29,18 @@ def _find_tag(input: str, tag: str) -> Optional[TagPosition]:
 
 
 def _next_tag(input: str) -> Optional[LocatedTag]:
-    tag_match = regex.search(r'<\s*(\w+)[^>]*>', input, flags=regex.IGNORECASE)
+    tag_match = regex.search(r"<\s*(\w+)[^>]*>", input, flags=regex.IGNORECASE)
     if tag_match:
-        return LocatedTag(tag_match.group(1).casefold(),
-                          TagPosition(tag_match.start(), tag_match.end()))
+        return LocatedTag(
+            tag_match.group(1).casefold(),
+            TagPosition(tag_match.start(), tag_match.end()),
+        )
     else:
         return None
 
 
 def _close_tag(tag: str) -> str:
-    tag_name_match = regex.match(r'\s*<\s*(\w+)', tag)
+    tag_name_match = regex.match(r"\s*<\s*(\w+)", tag)
     if not tag_name_match:
         raise ValueError(f"{tag} is not an opening tag")
     return "</" + tag_name_match.group(1) + ">"
@@ -53,15 +55,15 @@ class ListEntry(NamedTuple):
     content: str
 
     @staticmethod
-    def construct(entry: str) -> 'ListEntry':
+    def construct(entry: str) -> "ListEntry":
         entry = normalize_space(entry.strip())
-        decoration_open_match = regex.match(r'<\s*(\w+)[^>]*>', entry)
+        decoration_open_match = regex.match(r"<\s*(\w+)[^>]*>", entry)
         if decoration_open_match:
-            entry = entry[decoration_open_match.end():]
+            entry = entry[decoration_open_match.end() :]
             tag_name = decoration_open_match.group(1)
-            decoration_close_match = regex.search(r'</\s*' + tag_name + r'\s*>$', entry)
+            decoration_close_match = regex.search(r"</\s*" + tag_name + r"\s*>$", entry)
             if decoration_close_match:
-                entry = entry[:decoration_close_match.start()].strip()
+                entry = entry[: decoration_close_match.start()].strip()
             return ListEntry(decoration_open_match.group(0), entry)
         else:
             return ListEntry(None, entry)
@@ -73,7 +75,7 @@ class ListEntry(NamedTuple):
             return self.decoration + self.content + _close_tag(self.decoration)
 
 
-class HTMLList():
+class HTMLList:
     """
     Parses HTML document into an iterator over elements of <ul>, <ol> or paragraphs
     """
@@ -120,15 +122,15 @@ class HTMLList():
         yield "\t</body>\n</html>"
 
     def _separate_preamble(self) -> None:
-        located_body = _find_tag(self._input, 'body')
+        located_body = _find_tag(self._input, "body")
         if not located_body:
             self.preamble = ""
             return
-        self.preamble = self._input[:located_body.end]
-        self._input = self._input[located_body.end:]
-        located_body_end = _find_tag(self._input, '/body')
+        self.preamble = self._input[: located_body.end]
+        self._input = self._input[located_body.end :]
+        located_body_end = _find_tag(self._input, "/body")
         if located_body_end:
-            self._input = self._input[:located_body_end.start]
+            self._input = self._input[: located_body_end.start]
 
     def _detect_list_type(self) -> None:
         first_body_tag = _next_tag(self._input)
@@ -142,14 +144,14 @@ class HTMLList():
         elif first_body_tag.name == "p":
             self._list_type = HTMLList.PARAGRAPHS
         else:
-            self._input = self._input[first_body_tag.position.end:]
+            self._input = self._input[first_body_tag.position.end :]
             self._detect_list_type()
 
     def _list_next(self) -> ListEntry:
         li_tag = _find_tag(self._input, "li")
         if not li_tag:
             raise StopIteration
-        self._input = self._input[li_tag.end:]
+        self._input = self._input[li_tag.end :]
         close_li_tag = _find_tag(self._input, "/li")
         next_li_tag = _find_tag(self._input, "li")
         if not close_li_tag and not next_li_tag:
@@ -160,16 +162,16 @@ class HTMLList():
             else:
                 assert False
             if end_list_tag:
-                entry_content = self._input[:end_list_tag.start]
+                entry_content = self._input[: end_list_tag.start]
             else:
                 entry_content = self._input
             return ListEntry.construct(entry_content)
         if close_li_tag:
-            entry_content = self._input[:close_li_tag.start]
-            self._input = self._input[close_li_tag.end:]
+            entry_content = self._input[: close_li_tag.start]
+            self._input = self._input[close_li_tag.end :]
         elif next_li_tag:
-            entry_content = self._input[:next_li_tag.start]
-            self._input = self._input[next_li_tag.start:]
+            entry_content = self._input[: next_li_tag.start]
+            self._input = self._input[next_li_tag.start :]
         else:
             assert False
         return ListEntry.construct(entry_content)
@@ -178,16 +180,16 @@ class HTMLList():
         p_tag = _find_tag(self._input, "p")
         if not p_tag:
             raise StopIteration
-        p_description = self._input[p_tag.start:p_tag.end]
-        self._input = self._input[p_tag.end:]
+        p_description = self._input[p_tag.start : p_tag.end]
+        self._input = self._input[p_tag.end :]
         close_p_tag = _find_tag(self._input, "/p")
         next_p_tag = _find_tag(self._input, "p")
         if close_p_tag:
-            entry_content = p_description + self._input[:close_p_tag.end]
-            self._input = self._input[close_p_tag.end:]
+            entry_content = p_description + self._input[: close_p_tag.end]
+            self._input = self._input[close_p_tag.end :]
         elif next_p_tag:
-            entry_content = p_description + self._input[:next_p_tag.start]
-            self._input = self._input[next_p_tag.start:]
+            entry_content = p_description + self._input[: next_p_tag.start]
+            self._input = self._input[next_p_tag.start :]
         else:
             entry_content = p_description + self._input
             self._input = ""
@@ -195,7 +197,6 @@ class HTMLList():
 
 
 class ExtractedTags:
-
     def __init__(self, parts: List[str], tags: List[str]):
         self._tags: List[Tuple[int, str]] = list(zip(map(len, parts), tags))
 
@@ -209,12 +210,14 @@ class ExtractedTags:
                     opened_tags.pop()
             else:
                 opened_tags.append(tag)
-        return "".join(itertools.chain(opened_tags, [s], map(_close_tag, reversed(opened_tags))))
+        return "".join(
+            itertools.chain(opened_tags, [s], map(_close_tag, reversed(opened_tags)))
+        )
 
     def insert_tags(self, s: str, offset: int) -> str:
         if not self._tags:
             return s
-        total_offset = - offset
+        total_offset = -offset
         parts: List[str] = []
         for tag_offset, tag in self._tags:
             if total_offset + tag_offset < 0:
@@ -223,7 +226,7 @@ class ExtractedTags:
             if total_offset + tag_offset > len(s):
                 break
             part_start = total_offset if total_offset >= 0 else 0
-            parts.append(html.escape(s[part_start:total_offset + tag_offset]))
+            parts.append(html.escape(s[part_start : total_offset + tag_offset]))
             parts.append(tag)
             total_offset += tag_offset
         if total_offset < 0:
@@ -237,7 +240,7 @@ def extract_tags(s: str) -> Tuple[str, ExtractedTags]:
     Returns HTML-unescaped string without tags
     and an object containing extracted tags with their positions
     """
-    tag_regex = regex.compile(r'<[^>]*>')
+    tag_regex = regex.compile(r"<[^>]*>")
     tags: List[str] = list(map(lambda m: m.group(), regex.finditer(tag_regex, s)))
     parts: List[str] = list(map(html.unescape, regex.splititer(tag_regex, s)))
     assert parts
