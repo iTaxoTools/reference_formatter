@@ -2,8 +2,10 @@
 
 from typing import Optional
 
-from .options import OptionsDict, Options, Style
+from .options import OptionsDict, Options, Style, InitialsPeriod
 from .handle_html import ExtractedTags
+
+import regex  # type: ignore
 
 
 class Author:
@@ -32,15 +34,21 @@ class Author:
         )
 
     def format_author(self, options: OptionsDict, first: bool, tags: ExtractedTags):
+        assert options[Options.InitialsPeriod] != InitialsPeriod.NoChange
         if self.is_et_al:
-            if options[Options.InitialsNoPeriod]:
+            if options[Options.InitialsPeriod] == InitialsPeriod.WithoutPeriod:
                 return "et al"
-            else:
+            elif options[Options.InitialsPeriod] == InitialsPeriod.WithPeriod:
                 return "et al."
-        if options[Options.InitialsNoPeriod]:
+            else:
+                assert False
+        if options[Options.InitialsPeriod] == InitialsPeriod.WithoutPeriod:
             initials = self.initials.replace(".", "")
+        elif options[Options.InitialsPeriod] == InitialsPeriod.WithPeriod:
+            if "." not in self.initials:
+                initials = "".join([initial + ". " for initial in self.initials])
         else:
-            initials = self.initials
+            assert False
         if options[Options.HtmlFormat]:
             if options[Options.SurnameStyle] == Style.Preserve:
                 surname = tags.surround_tags(self.surname, self.span.start)
@@ -50,7 +58,7 @@ class Author:
             surname = self.surname
         if options[Options.InitialsBefore] and not first:
             return initials + " " + surname
-        elif options[Options.InitialsNoPeriod]:
+        elif options[Options.InitialsPeriod] == InitialsPeriod.WithPeriod:
             return surname + " " + initials
         else:
             return surname + ", " + initials

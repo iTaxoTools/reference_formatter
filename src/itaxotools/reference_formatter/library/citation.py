@@ -23,7 +23,14 @@ from .journal_list import JournalMatcher, NameForm
 from .handle_html import ExtractedTags, HTMLList, extract_tags, ListEntry
 from .positioned import PositionedString
 from .crossref import doi_from_title
-from .options import OptionsDict, Options, Style, LastSeparator, JournalSeparator
+from .options import (
+    OptionsDict,
+    Options,
+    Style,
+    LastSeparator,
+    JournalSeparator,
+    InitialsPeriod,
+)
 from .author import Author
 from .journal import Journal
 from .doi import parse_doi
@@ -61,13 +68,21 @@ class Reference(NamedTuple):
         authors, authors_span = self.authors
         if not authors:
             return input
+        if options[Options.InitialsPeriod] == InitialsPeriod.NoChange:
+            options[Options.InitialsPeriod] = InitialsPeriod.WithoutPeriod
+            for author in authors:
+                if "." in author.initials:
+                    options[Options.InitialsPeriod] = InitialsPeriod.WithPeriod
         formatted_authors = (
             author.format_author(options, i == 0, tags)
             for i, author in enumerate(authors)
         )
         *authors_str, last_author = formatted_authors
         if not options[Options.YearFormat].has_paren():
-            if options[Options.InitialsBefore] or options[Options.InitialsNoPeriod]:
+            if (
+                options[Options.InitialsBefore]
+                or options[Options.InitialsPeriod] == InitialsPeriod.WithoutPeriod
+            ):
                 end_sep = "."
             else:
                 end_sep = ""
