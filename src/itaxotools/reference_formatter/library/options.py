@@ -7,6 +7,19 @@ from enum import IntEnum, Enum
 from .journal_list import NameForm
 
 
+class InitialsPeriod(IntEnum):
+    NoChange = 0
+    WithPeriod = 1
+    WithoutPeriod = 2
+
+    def __str__(self) -> str:
+        return [
+            "do not change",
+            "with abbreviating period",
+            "without abbreviating period",
+        ][self]
+
+
 class LastSeparator(IntEnum):
     Comma = 0
     Ampersand = 1
@@ -164,7 +177,7 @@ class OptionGroup(Enum):
 class Options(Enum):
     ProcessAuthorsAndYear = (bool, "Convert authors and year of publication")
     InitialsBefore = (bool, "Place initials before surname (except first name)")
-    InitialsNoPeriod = (bool, "Write initials without abbreviating period")
+    InitialsPeriod = (InitialsPeriod, "Initials")
     LastNameSep = (LastSeparator, "Precede last name with:")
     YearFormat = (YearFormat, "Format year as:")
     ProcessPageRangeVolume = (bool, "Convert page range and volume/issue number")
@@ -194,7 +207,7 @@ class Options(Enum):
         return {
             Options.ProcessAuthorsAndYear: OptionGroup.AuthorsAndYear,
             Options.InitialsBefore: OptionGroup.AuthorsAndYear,
-            Options.InitialsNoPeriod: OptionGroup.AuthorsAndYear,
+            Options.InitialsPeriod: OptionGroup.AuthorsAndYear,
             Options.LastNameSep: OptionGroup.AuthorsAndYear,
             Options.YearFormat: OptionGroup.AuthorsAndYear,
             Options.ProcessPageRangeVolume: OptionGroup.PageRangeAndVolume,
